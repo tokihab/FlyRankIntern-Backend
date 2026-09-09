@@ -1,5 +1,6 @@
 const express = require('express');
 const app = express();
+app.use(express.json());
 const port = 3000;
 
 // In-memory database
@@ -36,6 +37,30 @@ app.get('/tasks/:id', (req, res) => {
   }
   
   res.json(task);
+});
+
+// Stage 3: Create a new task
+app.post('/tasks', (req, res) => {
+  const { title } = req.body;
+
+  // Validation: check if title is missing or empty
+  if (!title || title.trim() === '') {
+    return res.status(400).json({ error: "Title is required" });
+  }
+
+  // Find the highest existing ID and add 1
+  const nextId = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
+
+  const newTask = {
+    id: nextId,
+    title: title,
+    done: false
+  };
+
+  tasks.push(newTask);
+  
+  // 201 Created
+  res.status(201).json(newTask);
 });
 
 // Stage 0: Start the server
