@@ -63,6 +63,52 @@ app.post('/tasks', (req, res) => {
   res.status(201).json(newTask);
 });
 
+// Stage 4: Update a task
+app.put('/tasks/:id', (req, res) => {
+  const taskId = parseInt(req.params.id);
+  const task = tasks.find(t => t.id === taskId);
+
+  // 404 if task doesn't exist
+  if (!task) {
+    return res.status(404).json({ error: `Task ${taskId} not found` });
+  }
+
+  // 400 if body is entirely empty
+  if (Object.keys(req.body).length === 0) {
+    return res.status(400).json({ error: "Request body cannot be empty" });
+  }
+
+  const { title, done } = req.body;
+
+  // Update properties if they were provided
+  if (title !== undefined) {
+    task.title = title;
+  }
+  if (done !== undefined) {
+    task.done = done;
+  }
+
+  // 200 OK by default
+  res.json(task);
+});
+
+// Stage 4: Delete a task
+app.delete('/tasks/:id', (req, res) => {
+  const taskId = parseInt(req.params.id);
+  const taskIndex = tasks.findIndex(t => t.id === taskId);
+
+  // 404 if task doesn't exist
+  if (taskIndex === -1) {
+    return res.status(404).json({ error: `Task ${taskId} not found` });
+  }
+
+  // Remove the task from the array
+  tasks.splice(taskIndex, 1);
+  
+  // 204 No Content
+  res.status(204).send();
+});
+
 // Stage 0: Start the server
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
