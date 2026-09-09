@@ -3,6 +3,10 @@ const app = express();
 app.use(express.json());
 const port = 3000;
 
+const swaggerUi = require('swagger-ui-express');
+const swaggerDocument = require('./openapi.json');
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
 // In-memory database
 const tasks = [
   { id: 1, title: "Set up Express server", done: true },
