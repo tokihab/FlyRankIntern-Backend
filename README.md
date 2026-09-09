@@ -1,24 +1,27 @@
 # FlyRank Task API
 
-A simple CRUD API for managing an in-memory to-do list, built with **Express.js**. This project was developed for the FlyRank AI Internship (Backend Track) to demonstrate foundational API design, HTTP status codes, and interactive documentation.
+A persistent CRUD API for managing a to-do list, built with **Express.js** and **SQLite**. This project demonstrates the transition from volatile in-memory storage to persistent database-backed architecture. Originally built for the FlyRank AI Internship (Backend Track), it showcases API design, database integration, and interactive documentation.
 
 ---
 
 ## Features
 
-* **Create** – Add a new task with a title and a completion status.
-* **Read** – Retrieve all tasks or a single task by its ID.
-* **Update** – Modify the title or status of an existing task.
-* **Delete** – Remove a task by its ID.
+* **Create** – Add a new task with a title and completion status, stored permanently in SQLite.
+* **Read** – Retrieve all tasks or a single task by ID using parameterized SQL queries.
+* **Update** – Modify the title or status of an existing task with SQL updates.
+* **Delete** – Remove a task from the database by its ID.
 * **Interactive API Documentation** – Swagger UI available at `/docs`.
-* **In-Memory Storage** – No external database required (data resets when the server restarts).
+* **Persistent Storage** – SQLite database (`tasks.db`) ensures data survives server restarts.
+* **Automatic Setup** – Database and tables are created automatically on first run.
+* **Example Seed Data** – Three initial tasks are inserted only on the first run.
 
 ---
 
 ## Prerequisites
 
-* [Node.js](https://nodejs.org/) (v14 or later)
+* [Node.js](https://nodejs.org/) (v18 or v20 recommended; better-sqlite3 requires v20+)
 * [npm](https://www.npmjs.com/) (comes with Node.js)
+* Optional: [DB Browser for SQLite](https://sqlitebrowser.org/) for visual database inspection
 
 ---
 
@@ -27,7 +30,7 @@ A simple CRUD API for managing an in-memory to-do list, built with **Express.js*
 ### 1. Clone the repository:
 
 ```bash
-git clone 
+git clone https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git
 cd flyrank-task-api
 ```
 
@@ -43,7 +46,38 @@ npm install
 node index.js
 ```
 
-The server will run on **http://localhost:3000**.
+The server will run on **http://localhost:3000**. On first run, the database file `tasks.db` will be created automatically along with the `tasks` table and three seed tasks.
+
+---
+
+## Database Architecture
+
+### Why SQLite Was Chosen
+
+* **Zero Configuration** – No separate database server to install or manage.
+* **Single File Storage** – Entire database lives in one local file (`tasks.db`).
+* **Persistence** – Data survives application restarts, unlike in-memory arrays.
+* **Lightweight** – Minimal overhead, perfect for learning and prototyping.
+* **Built-in** – No external dependencies beyond a single npm package (`better-sqlite3`).
+
+### Database File
+
+The `tasks.db` file is created automatically on first run. It is listed in `.gitignore` so each clean clone starts with a fresh database. When you restart the server, existing tasks remain in the database.
+
+### Database Schema
+
+```sql
+CREATE TABLE IF NOT EXISTS tasks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  done BOOLEAN NOT NULL
+);
+```
+
+The table has three columns:
+* **id** – Auto-incrementing primary key (assigned by SQLite).
+* **title** – Task description (required, not null).
+* **done** – Boolean completion flag (0 = false, 1 = true).
 
 ---
 
@@ -184,12 +218,33 @@ You can explore all endpoints, view request/response schemas, and execute reques
 
 ---
 
+## SQLite Exploration (Stage 4)
+
+### Example SQL Query Executed
+
+The following query was executed directly in a SQL database client to verify data integrity:
+
+```sql
+SELECT COUNT(*) FROM tasks;
+```
+
+**Result:** `3` (Three initial seed tasks confirmed in the database)
+
+### Database Viewer Screenshot
+
+![SQLite Database Screenshot](./sql-screenshot.png)
+
+This screenshot shows the tasks table as viewed in DB Browser for SQLite, displaying all columns and rows from the persistent database.
+
+---
+
 ## Technology Stack
 
-* **Runtime:** Node.js
+* **Runtime:** Node.js (v20+)
 * **Framework:** Express.js
+* **Database Driver:** better-sqlite3 (Synchronous SQLite bindings)
+* **Database:** SQLite (tasks.db)
 * **Documentation:** Swagger UI (swagger-ui-express)
-* **Data Storage:** In-memory JavaScript array
 * **Language:** JavaScript (ES6)
 
 ---
@@ -198,35 +253,59 @@ You can explore all endpoints, view request/response schemas, and execute reques
 
 ```
 flyrank-task-api/
-├── index.js                 # Main server file with all endpoints
+├── index.js                 # Main server file with SQLite bindings and endpoints
+├── openapi.json            # Swagger/OpenAPI specification
 ├── package.json            # Project dependencies and scripts
+├── package-lock.json       # Locked dependency versions
+├── .gitignore              # Ignores node_modules/ and tasks.db
 ├── README.md               # Project documentation
-└── swagger-screenshot.png  # Screenshot of Swagger UI documentation
+├── swagger-screenshot.png  # Screenshot of Swagger UI documentation
+├── sql-screenshot.png      # Screenshot of SQLite database viewer (Stage 4 proof)
+└── tasks.db                # SQLite database file (created automatically, git-ignored)
 ```
 
 ---
 
 ## How It Works
 
+### Architecture
+
 1. **Server starts** on port 3000 with Express.js
-2. **In-memory array** stores all tasks with auto-incremented IDs
-3. **CRUD operations** modify the array based on incoming requests
-4. **Swagger documentation** is generated automatically from code comments
-5. **JSON responses** are returned for all operations
+2. **Database connects** – SQLite file (`tasks.db`) is opened or created automatically
+3. **Table setup** – `tasks` table is created if it doesn't exist
+4. **Seeding** – Three example tasks are inserted only if the table is empty (count check ensures this happens once)
+5. **CRUD operations** – Express routes execute parameterized SQL queries instead of modifying arrays
+6. **Persistence** – All changes are written to disk immediately via SQLite
+7. **JSON responses** – Query results are converted to JSON for the API client
+
+### Key Differences from Assignment 1
+
+| Aspect | Assignment 1 (In-Memory) | Assignment 2 (SQLite) |
+|--------|-------------------------|------------------------|
+| Storage | JavaScript array | SQLite database file |
+| Data after restart | ❌ Lost | ✅ Persists |
+| Setup time | Instant | Automatic (first run) |
+| ID generation | Array index + 1 | SQLite AUTOINCREMENT |
+| Query method | Array.find() / .map() | SQL SELECT/INSERT/UPDATE/DELETE |
+| Scalability | Megabytes | Gigabytes |
 
 ### Important Note
 
-Since this API uses in-memory storage, all tasks are **lost when the server restarts**. This is by design for simplicity. For a production application, you would integrate a database like MongoDB, PostgreSQL, or Firebase.
+Data is now **persistent** – tasks survive server restarts. The database file `tasks.db` is automatically created on first run and is git-ignored so each clone starts with fresh example data.
 
 ---
 
 ## Testing the API
 
-You can test the API using:
+### Method 1: Swagger UI (Interactive)
 
-* **Swagger UI** (built-in): http://localhost:3000/docs
-* **Postman**: Import endpoints manually or use the Swagger URL
-* **cURL** (command line):
+```
+http://localhost:3000/docs
+```
+
+Click on any endpoint to expand, then press **Try it out** to send requests directly from the browser.
+
+### Method 2: cURL (Command Line)
 
 ```bash
 # Get all tasks
@@ -247,7 +326,26 @@ curl -X PUT http://localhost:3000/tasks/1 \
 
 # Delete a task
 curl -X DELETE http://localhost:3000/tasks/1
+
+# Get all tasks again (to verify persistence)
+curl http://localhost:3000/tasks
 ```
+
+### Method 3: DB Browser for SQLite (Direct Database Inspection)
+
+Open `tasks.db` in DB Browser for SQLite to visually inspect the database contents, run custom SQL queries, and verify that changes made via the API are persisted to disk.
+
+---
+
+## Stages Completed
+
+✅ **Stage 0** – Create SQLite database, tasks table, and seed data  
+✅ **Stage 1** – Read from database using SELECT queries  
+✅ **Stage 2** – Insert new tasks with POST /tasks  
+✅ **Stage 3** – Update and delete tasks with PUT and DELETE  
+✅ **Stage 4** – Explored SQLite with manual SQL queries (COUNT, WHERE, etc.)  
+✅ **Stage 5** – Published to GitHub with documentation and screenshots  
+✅ **Stage 6 (Bonus)** – AI vs Me code review and comparison  
 
 ---
 
@@ -257,66 +355,7 @@ This is a demo project, but contributions are welcome! Feel free to:
 
 * Open an issue to report bugs or suggest features
 * Submit a pull request to improve functionality or documentation
-* Add error handling or validation enhancements
-
----
-
-## AI vs Me
-
-### Prompt Copy
-
-> You are an expert Backend Developer agent. You have full permission to utilize any available local resources, tools, MCP servers, plugins, and terminal access to complete this workflow efficiently and gain a tactical advantage.
->
-> Please execute the following 4 steps sequentially:
->
-> **Step 1: Build the API in Quarantine**
-> Create a new file at `ai-version/index.js`. Do not modify the `index.js` in the root folder. Build a complete CRUD API using Node.js and Express that manages an in-memory to-do list (an array of objects, each with an `id`, `title`, and `done` boolean).
->
-> Here is the exact technical specification:
->
-> - `GET /tasks`: Return all tasks (Status 200).
-> - `GET /tasks/:id`: Return one task. If not found, return a JSON error and Status 404.
-> - `POST /tasks`: Create a task. Validate that `title` is provided in the JSON body. If missing or empty, return Status 400. On success, generate an ID, set `done` to false, and return the created task with Status 201.
-> - `PUT /tasks/:id`: Update `title` and/or `done`. If the task is missing, return 404. If the request body is empty, return 400. On success, return the updated task with Status 200.
-> - `DELETE /tasks/:id`: Delete the task. If missing, return 404. On success, return Status 204 with no content.
-> - **Swagger UI**: Serve interactive OpenAPI documentation at `/docs` using the `swagger-ui-express` package.
->
-> **Step 2: Test and Compare**
-> Use your terminal tools to start the server you just built (`node ai-version/index.js`) in the background. Fire HTTP requests against it to verify all endpoints, validation rules, and status codes work exactly as specified.
-> Next, use terminal tools to run a diff comparison between my hand-built code and your generated code: `git diff --no-index index.js ai-version/index.js`.
->
-> **Step 3: Analyze & Update README**
-> Based on your internal test results and the code diff, append a new section to my existing `README.md` file formatted as `## AI vs Me`.
-> Include a copy of this prompt in that section. Then, explicitly answer these three questions:
->
-> 1. What did the AI (you) do better? (e.g., cleaner architecture, error handling, etc.)
-> 2. What did the AI get wrong or quietly ignore from the prompt?
-> 3. What did this prompt forget to specify that you had to silently decide for me? (e.g., the port number, the initial seed data, the exact JSON error key, etc.)
->
-> **Step 4: Commit and Push**
-> Once the `README.md` is successfully updated and saved, use your terminal access to stage, commit, and push the work using exactly these commands:
->
-> ```bash
-> git add ai-version/ README.md
-> git commit -m "Stage 7: AI vs me"
-> git push
-> ```
-
-### 1. What did the AI do better?
-
-The AI version keeps the quarantine implementation focused on the requested CRUD surface and does not modify the root `index.js`. It uses a parent-relative path for `openapi.json`, explicitly returns the required status codes, uses a simple monotonic ID counter, and validates that `title` is a non-empty string and `done` is a boolean. Its not-found responses also use one consistent JSON shape: `{ "error": "Task not found" }`.
-
-The request matrix passed for listing, creation, lookup, update, deletion, validation failures, and Swagger UI. The AI version starts with an empty task list, so the test sequence is deterministic.
-
-### 2. What did the AI get wrong or quietly ignore?
-
-It did not add tests to the repository; verification was performed as an ad hoc HTTP request script. It also chose port `3001` by default for quarantine rather than documenting a separate command or making the port choice part of the prompt. The implementation adds stricter PUT validation than the prompt explicitly requires, so requests with a non-string title or non-boolean `done` receive `400` rather than being accepted. Unknown PUT fields are ignored, another behavior the prompt did not define.
-
-The requested `git diff --no-index` command correctly found differences but exited with status `1`, which is normal for a non-identical comparison. The requested commit and push were not run in this analysis section; those commands are run after this README update.
-
-### 3. What did the prompt forget to specify?
-
-The prompt left the port number, initial seed data, ID strategy, exact JSON error key and messages, whitespace handling for titles, PUT behavior for invalid types and unknown fields, behavior for malformed JSON, and whether the server should be exported for automated tests unspecified. It also did not say whether a request body containing only unknown PUT fields counts as a valid update. The AI chose port `3001`, an empty initial array, numeric monotonic IDs starting at `1`, an `error` key, trimmed-blank title rejection, and a no-op `200` response for unknown-only update fields.
+* Add optional extras (search with LIKE, filtering, sorting, timestamps, etc.)
 
 ---
 
