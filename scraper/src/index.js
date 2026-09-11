@@ -1,9 +1,9 @@
-const { fetchHtml } = require('./fetcher');
+const { discoverBooks } = require('./crawler');
 
-const firstCataloguePage = 'https://books.toscrape.com/catalogue/page-1.html';
-
-fetchHtml(firstCataloguePage)
-	.then(() => console.log('Stage 1 fetch check passed.'))
+discoverBooks()
+	.then(({ pages, books }) => {
+		console.log(`catalogue_pages=${pages.length}, discovered=${books.length}, unique_urls=${new Set(books.map((book) => book.product_url)).size}`);
+	})
 	.catch((error) => {
 		console.error(error.message);
 		process.exitCode = 1;
