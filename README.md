@@ -283,6 +283,10 @@ HTTP/1.1 204 No Content
 
 Open your browser to `http://localhost:3000/docs` and use the built-in interface to test all endpoints.
 
+![Swagger UI documentation](swagger-screenshot.png)
+
+*Swagger UI for the task API.*
+
 ### Method 2: cURL (Command Line)
 
 ```bash
@@ -343,6 +347,10 @@ curl http://localhost:3000/tasks
 Expected response: All 4 tasks including the one you just created.
 
 **✅ If task #4 is still there, persistence is proven!**
+
+![SQLite persistence screenshot](sql-screenshot.png)
+
+*SQLite task data stored by the API.*
 
 ---
 
