@@ -1,11 +1,12 @@
 # FlyRank Task API (Containerized Stack)
 
-A persistent CRUD API built with **Express.js** and **SQLite**, fully containerized using **Docker** and **Docker Compose**. This project demonstrates moving from local development to a production-ready containerized stack that runs identically on any machine.
+A persistent CRUD and authentication API built with **Express.js**, **SQLite**, and **Supabase Auth**, fully containerized using **Docker** and **Docker Compose**. This project demonstrates moving from local development to a reproducible backend with persistent storage and protected routes.
 
-Originally built for the FlyRank AI Internship (Backend Track), this is Assignment A3 / BE-04 — the third evolution of the task API:
+Originally built for the FlyRank AI Internship (Backend Track), this repository now includes Assignment A3 / BE-04 and BE-03 — the evolving task API:
 - **A1** – In-memory array (data lost on restart)
 - **A2** – SQLite file on disk (data persists locally)
 - **A3** – Containerized with Docker Compose (portable, reproducible stack)
+- **BE-03** – Supabase email/password authentication and protected routes
 
 ---
 
@@ -16,6 +17,7 @@ Originally built for the FlyRank AI Internship (Backend Track), this is Assignme
 * **Environment-Based Config** – Database paths and ports loaded from `.env` (git-ignored for security).
 * **Parameterized SQL Queries** – All database operations use safe placeholders (no SQL injection risk).
 * **Interactive API Documentation** – Swagger UI available at `/docs`.
+* **Supabase Authentication** – Signup, login, bearer-token verification, logout, and protected profile/dashboard routes.
 * **Health Check Endpoint** – `GET /health` confirms API readiness.
 * **Automatic Schema & Seeding** – Table created and three example tasks inserted only on first run.
 
@@ -32,6 +34,7 @@ Originally built for the FlyRank AI Internship (Backend Track), this is Assignme
 | **Setup** | `npm install && node index.js` | Same | `docker compose up -d` |
 | **Database Location** | RAM | Local filesystem | Container `/app/data/` |
 | **Reproducibility** | Works on my machine | Needs SQLite + Node | Identical everywhere |
+| **Authentication** | None | None | Supabase Auth with bearer tokens |
 
 ### Container Architecture
 
@@ -430,12 +433,13 @@ The API stays exactly the same across all three. Only the storage layer changes�
 
 ## Technology Stack
 
-* **Runtime:** Node.js v20 (Alpine Linux base)
+* **Runtime:** Node.js v22 (Alpine Linux base)
 * **Framework:** Express.js
 * **Database Driver:** better-sqlite3 (synchronous SQLite bindings)
 * **Database:** SQLite (file-based, single-file, zero-config)
 * **Containerization:** Docker & Docker Compose
 * **Documentation:** Swagger UI (OpenAPI 3.0)
+* **Authentication:** Supabase Auth via `@supabase/supabase-js`
 * **Language:** JavaScript (ES6)
 
 ---
@@ -448,6 +452,7 @@ The API stays exactly the same across all three. Only the storage layer changes�
 ✅ **Stage 3** – Implemented full CRUD (POST, PUT, DELETE)  
 ✅ **Stage 4** – Created Dockerfile and docker-compose.yml; proved persistence  
 ✅ **Stage 5** – Published to GitHub with documentation and persistence proof  
+✅ **BE-03** – Added Supabase signup/login, reusable bearer middleware, protected routes, logout, and Swagger bearer authorization
 
 ---
 
@@ -523,5 +528,103 @@ This project is open-source and available under the **MIT License**.
 **Toni Ihab Youssef**
 
 FlyRank AI Internship · Backend Track · Assignment A3 / BE-04 (Containerize your stack)
+
+---
+
+## Auth - Login & Protect (BE-03)
+
+The API uses a trust triangle:
+
+```text
+Client <-> Express Server <-> Supabase Identity Provider
+```
+
+The client sends credentials or a bearer token to the Express server. The server delegates signup, login, token verification, and logout to Supabase Auth. Only the Supabase project URL and public anon key are used; passwords and service-role keys never enter this application.
+
+### Environment Setup
+
+Copy the template and replace the placeholders with your Supabase project values:
+
+```bash
+cp .env.example .env
+```
+
+```env
+PORT=3000
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your_anon_key
+DB_PATH=/app/data/tasks.db
+```
+
+For Docker Compose, `SUPABASE_URL` and `SUPABASE_KEY` are passed from the host environment into the container. `.env` remains ignored by Git and Docker build context.
+
+### Local Startup
+
+```bash
+npm install
+node index.js
+```
+
+For the containerized stack:
+
+```bash
+docker compose up -d --build
+```
+
+### Auth Endpoint Reference
+
+| URL | Method | Auth | Response codes |
+|-----|--------|------|----------------|
+| `/auth/signup` | POST | None | 201, 400 |
+| `/auth/login` | POST | None | 200, 400, 401 |
+| `/public/info` | GET | None | 200 |
+| `/protected/profile` | GET | Bearer token | 200, 401 |
+| `/protected/dashboard` | GET | Bearer token | 200, 401 |
+| `/auth/logout` | POST | Bearer token | 204, 401 |
+| `/docs` | GET | None | 200 |
+
+### End-to-End Auth Verification
+
+```bash
+# Missing password: 400
+curl -i -X POST http://localhost:3000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com"}'
+
+# Create a user: 201
+curl -i -X POST http://localhost:3000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"a-strong-password"}'
+
+# Log in and copy access_token from the JSON response: 200
+curl -i -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@example.com","password":"a-strong-password"}'
+
+# Protected profile: 200 with a valid token
+curl -i http://localhost:3000/protected/profile \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
+# Invalid token: 401
+curl -i http://localhost:3000/protected/profile \
+  -H "Authorization: Bearer invalid-token"
+
+# Public route: 200 without authentication
+curl -i http://localhost:3000/public/info
+
+# Logout: 204
+curl -i -X POST http://localhost:3000/auth/logout \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+### Swagger Bearer Authentication
+
+Open `http://localhost:3000/docs`. Use the **Authorize** button with a valid access token, including the `Bearer` prefix when prompted. The lock icon marks `/protected/profile`, `/protected/dashboard`, and `/auth/logout` as protected operations.
+
+The configured bearer authentication is shown below. GitHub renders this image directly on the repository's main page:
+
+[View the Swagger auth screenshot](swagger-auth-screenshot.png)
+
+![Swagger UI bearer authentication](swagger-auth-screenshot.png)
 
 ---
