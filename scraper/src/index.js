@@ -1,8 +1,11 @@
 const { discoverBooks } = require('./crawler');
+const { extractBooks } = require('./extractor');
 
 discoverBooks()
-	.then(({ pages, books }) => {
-		console.log(`catalogue_pages=${pages.length}, discovered=${books.length}, unique_urls=${new Set(books.map((book) => book.product_url)).size}`);
+	.then(async ({ books }) => {
+		const records = await extractBooks(books);
+		console.log(`detail_pages=${records.length}`);
+		console.log(JSON.stringify(records[0], null, 2));
 	})
 	.catch((error) => {
 		console.error(error.message);
