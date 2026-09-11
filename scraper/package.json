@@ -1,0 +1,13 @@
+{
+  "name": "flyrank-a9-polite-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "cheerio": "1.0.0",
+    "zod": "^3.23.8"
+  }
+}
