@@ -21,14 +21,20 @@ function extractRawRecord(html, productUrl, sourcePage, fetchedAt) {
 
 async function extractBooks(discoveredBooks) {
   const records = [];
+  const failedPages = [];
 
   for (const book of discoveredBooks) {
-    const fetchedAt = new Date().toISOString();
-    const html = await fetchHtml(book.product_url);
-    records.push(extractRawRecord(html, book.product_url, book.source_page, fetchedAt));
+    try {
+      const fetchedAt = new Date().toISOString();
+      const html = await fetchHtml(book.product_url);
+      records.push(extractRawRecord(html, book.product_url, book.source_page, fetchedAt));
+    } catch (error) {
+      failedPages.push({ url: book.product_url, error: error.message });
+      console.error(`FAILED: ${book.product_url} (${error.message})`);
+    }
   }
 
-  return records;
+  return { records, failedPages };
 }
 
 module.exports = {
