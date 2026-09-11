@@ -1,97 +1,197 @@
-# FlyRank Task API
+# FlyRank Task API (Containerized Stack)
 
-A persistent CRUD API for managing a to-do list, built with **Express.js** and **SQLite**. This project demonstrates the transition from volatile in-memory storage to persistent database-backed architecture. Originally built for the FlyRank AI Internship (Backend Track), it showcases API design, database integration, and interactive documentation.
+A persistent CRUD API built with **Express.js** and **SQLite**, fully containerized using **Docker** and **Docker Compose**. This project demonstrates moving from local development to a production-ready containerized stack that runs identically on any machine.
+
+Originally built for the FlyRank AI Internship (Backend Track), this is Assignment A3 / BE-04 — the third evolution of the task API:
+- **A1** – In-memory array (data lost on restart)
+- **A2** – SQLite file on disk (data persists locally)
+- **A3** – Containerized with Docker Compose (portable, reproducible stack)
 
 ---
 
 ## Features
 
-* **Create** – Add a new task with a title and completion status, stored permanently in SQLite.
-* **Read** – Retrieve all tasks or a single task by ID using parameterized SQL queries.
-* **Update** – Modify the title or status of an existing task with SQL updates.
-* **Delete** – Remove a task from the database by its ID.
+* **One-Command Stack** – `docker compose up -d --build` starts the entire application and database together.
+* **Persistent SQLite Database** – Tasks survive container restarts via Docker named volumes.
+* **Environment-Based Config** – Database paths and ports loaded from `.env` (git-ignored for security).
+* **Parameterized SQL Queries** – All database operations use safe placeholders (no SQL injection risk).
 * **Interactive API Documentation** – Swagger UI available at `/docs`.
-* **Persistent Storage** – SQLite database (`tasks.db`) ensures data survives server restarts.
-* **Automatic Setup** – Database and tables are created automatically on first run.
-* **Example Seed Data** – Three initial tasks are inserted only on the first run.
+* **Health Check Endpoint** – `GET /health` confirms API readiness.
+* **Automatic Schema & Seeding** – Table created and three example tasks inserted only on first run.
+
+---
+
+## Architecture
+
+### Before & After
+
+| Aspect | A1 (Memory) | A2 (SQLite File) | A3 (Containerized) |
+|--------|-------------|------------------|---------------------|
+| **Storage** | JavaScript array | `tasks.db` on disk | `tasks.db` in volume |
+| **Persistence** | ❌ Lost on restart | ✅ Survives | ✅ Survives |
+| **Setup** | `npm install && node index.js` | Same | `docker compose up -d` |
+| **Database Location** | RAM | Local filesystem | Container `/app/data/` |
+| **Reproducibility** | Works on my machine | Needs SQLite + Node | Identical everywhere |
+
+### Container Architecture
+
+```
+Host Machine
+    ↓
+docker compose up
+    ↓
+┌─────────────────────────────────────┐
+│  Docker Container (node:20-alpine)  │
+│  ┌──────────────────────────────┐   │
+│  │  Express App (port 3000)     │   │
+│  │  ├─ GET /tasks              │   │
+│  │  ├─ POST /tasks             │   │
+│  │  ├─ PUT /tasks/:id          │   │
+│  │  ├─ DELETE /tasks/:id       │   │
+│  │  └─ GET /docs (Swagger)     │   │
+│  │                              │   │
+│  │  SQLite (better-sqlite3)    │   │
+│  └──────────────────────────────┘   │
+│           ↓                          │
+│  ┌──────────────────────────────┐   │
+│  │  /app/data/tasks.db          │   │
+│  │  (reads/writes via volume)   │   │
+│  └──────────────────────────────┘   │
+└─────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────┐
+│  Docker Named Volume (sqlite_data)  │
+│  ├─ Persists across restarts        │
+│  ├─ Mounted at container /app/data  │
+│  └─ Survives container deletion     │
+└─────────────────────────────────────┘
+```
 
 ---
 
 ## Prerequisites
 
-* [Node.js](https://nodejs.org/) (v18 or v20 recommended; better-sqlite3 requires v20+)
-* [npm](https://www.npmjs.com/) (comes with Node.js)
-* Optional: [DB Browser for SQLite](https://sqlitebrowser.org/) for visual database inspection
+* **Docker Desktop** (v20.10+) – [Download here](https://www.docker.com/products/docker-desktop)
+* **Git** – [Download here](https://git-scm.com/)
+* **curl** or **Postman** – For testing endpoints (optional; Swagger UI is built-in)
 
 ---
 
-## Installation & Setup
+## Quick Start (One Command)
 
-### 1. Clone the repository:
+### 1. Clone the repository and set up environment:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git
+git clone https://github.com/YOUR-USERNAME/flyrank-task-api.git
 cd flyrank-task-api
+cp .env.example .env
 ```
 
-### 2. Install dependencies:
+### 2. Start the full containerized stack:
 
 ```bash
-npm install
+docker compose up -d --build
 ```
 
-### 3. Start the server:
+**What happens:**
+- Docker builds the Node.js application image
+- Container starts on port 3000
+- Named volume `sqlite_data` is created or mounted
+- SQLite database is initialized at `/app/data/tasks.db`
+- Three example tasks are seeded (only on first run)
+- Express server listens on `http://localhost:3000`
+
+### 3. Verify the stack is running:
 
 ```bash
-node index.js
+docker ps
 ```
 
-The server will run on **http://localhost:3000**. On first run, the database file `tasks.db` will be created automatically along with the `tasks` table and three seed tasks.
+You should see `flyrank-task-api-app-1` with status `Up`.
+
+### 4. Test the API:
+
+```bash
+# Get all tasks
+curl http://localhost:3000/tasks
+
+# Open Swagger UI in browser
+open http://localhost:3000/docs
+```
 
 ---
 
-## Database Architecture
+## Environment Variables
 
-### Why SQLite Was Chosen
+Configuration is controlled through a `.env` file (excluded from git via `.gitignore`).
 
-* **Zero Configuration** – No separate database server to install or manage.
-* **Single File Storage** – Entire database lives in one local file (`tasks.db`).
-* **Persistence** – Data survives application restarts, unlike in-memory arrays.
-* **Lightweight** – Minimal overhead, perfect for learning and prototyping.
-* **Built-in** – No external dependencies beyond a single npm package (`better-sqlite3`).
+**Copy `.env.example` to `.env` before running:**
 
-### Database File
-
-The `tasks.db` file is created automatically on first run. It is listed in `.gitignore` so each clean clone starts with a fresh database. When you restart the server, existing tasks remain in the database.
-
-### Database Schema
-
-```sql
-CREATE TABLE IF NOT EXISTS tasks (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT NOT NULL,
-  done BOOLEAN NOT NULL
-);
+```bash
+cp .env.example .env
 ```
 
-The table has three columns:
-* **id** – Auto-incrementing primary key (assigned by SQLite).
-* **title** – Task description (required, not null).
-* **done** – Boolean completion flag (0 = false, 1 = true).
+### Available Variables
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `PORT` | Port the Express app listens on inside the container | `3000` | `3000` |
+| `DB_PATH` | Path to SQLite database inside the container | `/app/data/tasks.db` | `/app/data/tasks.db` |
+
+**Security Note:** The `.env` file contains configuration and is never committed to Git. Only `.env.example` is tracked so others know which keys to set.
+
+---
+
+## Docker Compose Configuration
+
+The `docker-compose.yml` file defines two services: your app and its persistent storage.
+
+```yaml
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DB_PATH=/app/data/tasks.db
+    volumes:
+      - sqlite_data:/app/data
+
+volumes:
+  sqlite_data:
+```
+
+**Key Points:**
+
+- **`build: .`** – Builds the Docker image from the local `Dockerfile`
+- **`ports: ["3000:3000"]`** – Maps container port 3000 to host port 3000
+- **`environment:`** – Passes environment variables to the running container
+- **`volumes: [sqlite_data:/app/data]`** – Mounts the named volume to `/app/data` inside the container (NOT to `/app`, which would shadow your code)
+- **`volumes:` (bottom)** – Declares the named volume that persists data across restarts
 
 ---
 
 ## API Endpoints
 
-| Operation | HTTP Method | Endpoint | Description |
-|-----------|-------------|----------|-------------|
-| Create | POST | `/tasks` | Add a new task |
-| Read (All) | GET | `/tasks` | List all tasks |
-| Read (One) | GET | `/tasks/:id` | Get task by ID |
-| Update | PUT | `/tasks/:id` | Change task title or status |
-| Delete | DELETE | `/tasks/:id` | Remove a task |
+All endpoints accept and return **JSON**.
 
-All endpoints return and accept JSON.
+### Core CRUD Operations
+
+| Operation | HTTP Method | Endpoint | Request Body | Response | Status |
+|-----------|-------------|----------|--------------|----------|--------|
+| **List All Tasks** | GET | `/tasks` | — | Array of tasks | 200 OK |
+| **Get One Task** | GET | `/tasks/:id` | — | Single task object | 200 OK, 404 Not Found |
+| **Create Task** | POST | `/tasks` | `{ "title": "..." }` | Created task object | 201 Created, 400 Bad Request |
+| **Update Task** | PUT | `/tasks/:id` | `{ "title": "...", "done": true }` | Updated task object | 200 OK, 400 Bad Request, 404 Not Found |
+| **Delete Task** | DELETE | `/tasks/:id` | — | (empty body) | 204 No Content, 404 Not Found |
+
+### Utility Endpoints
+
+| Endpoint | Method | Description | Response |
+|----------|--------|-------------|----------|
+| `/health` | GET | Health check (confirms app and DB are running) | `{ "status": "ok" }` |
+| `/docs` | GET | Interactive Swagger UI documentation | HTML/Swagger UI |
 
 ---
 
@@ -99,48 +199,30 @@ All endpoints return and accept JSON.
 
 ### GET /tasks – List all tasks
 
-**Request:**
-```http
-GET /tasks HTTP/1.1
-Host: localhost:3000
+```bash
+curl -i http://localhost:3000/tasks
 ```
 
 **Response:**
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json; charset=utf-8
-Content-Length: 104
-Date: Wed, 09 Sep 2026 13:25:21 GMT
 ```
 
 ```json
 [
-  {
-    "id": 1,
-    "title": "Set up Express server",
-    "done": true
-  },
-  {
-    "id": 3,
-    "title": "Publish to GitHub",
-    "done": false
-  }
+  { "id": 1, "title": "Set up Express server", "done": 1 },
+  { "id": 2, "title": "Build read endpoints", "done": 0 },
+  { "id": 3, "title": "Publish to GitHub", "done": 0 }
 ]
 ```
 
 ### POST /tasks – Create a new task
 
-**Request:**
-```http
-POST /tasks HTTP/1.1
-Host: localhost:3000
-Content-Type: application/json
-```
-
-```json
-{
-  "title": "Deploy to production"
-}
+```bash
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Learn Docker"}'
 ```
 
 **Response:**
@@ -152,25 +234,17 @@ Content-Type: application/json
 ```json
 {
   "id": 4,
-  "title": "Deploy to production",
+  "title": "Learn Docker",
   "done": false
 }
 ```
 
 ### PUT /tasks/:id – Update a task
 
-**Request:**
-```http
-PUT /tasks/1 HTTP/1.1
-Host: localhost:3000
-Content-Type: application/json
-```
-
-```json
-{
-  "title": "Update Express server",
-  "done": true
-}
+```bash
+curl -X PUT http://localhost:3000/tasks/1 \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Update Express server","done":true}'
 ```
 
 **Response:**
@@ -187,12 +261,10 @@ Content-Type: application/json
 }
 ```
 
-### DELETE /tasks/:id – Remove a task
+### DELETE /tasks/:id – Delete a task
 
-**Request:**
-```http
-DELETE /tasks/2 HTTP/1.1
-Host: localhost:3000
+```bash
+curl -X DELETE http://localhost:3000/tasks/2
 ```
 
 **Response:**
@@ -202,108 +274,11 @@ HTTP/1.1 204 No Content
 
 ---
 
-## Swagger UI Documentation
+## Testing the Containerized Stack
 
-Interactive API documentation is automatically generated and available at:
+### Method 1: Interactive Swagger UI
 
-```
-http://localhost:3000/docs
-```
-
-You can explore all endpoints, view request/response schemas, and execute requests directly from the browser without needing tools like Postman or curl.
-
-### Swagger UI Screenshot
-
-![Swagger UI Screenshot](./swagger-screenshot.png)
-
----
-
-## SQLite Exploration (Stage 4)
-
-### Example SQL Query Executed
-
-The following query was executed directly in a SQL database client to verify data integrity:
-
-```sql
-SELECT COUNT(*) FROM tasks;
-```
-
-**Result:** `3` (Three initial seed tasks confirmed in the database)
-
-### Database Viewer Screenshot
-
-![SQLite Database Screenshot](./sql-screenshot.png)
-
-This screenshot shows the tasks table as viewed in DB Browser for SQLite, displaying all columns and rows from the persistent database.
-
----
-
-## Technology Stack
-
-* **Runtime:** Node.js (v20+)
-* **Framework:** Express.js
-* **Database Driver:** better-sqlite3 (Synchronous SQLite bindings)
-* **Database:** SQLite (tasks.db)
-* **Documentation:** Swagger UI (swagger-ui-express)
-* **Language:** JavaScript (ES6)
-
----
-
-## Project Structure
-
-```
-flyrank-task-api/
-├── index.js                 # Main server file with SQLite bindings and endpoints
-├── openapi.json            # Swagger/OpenAPI specification
-├── package.json            # Project dependencies and scripts
-├── package-lock.json       # Locked dependency versions
-├── .gitignore              # Ignores node_modules/ and tasks.db
-├── README.md               # Project documentation
-├── swagger-screenshot.png  # Screenshot of Swagger UI documentation
-├── sql-screenshot.png      # Screenshot of SQLite database viewer (Stage 4 proof)
-└── tasks.db                # SQLite database file (created automatically, git-ignored)
-```
-
----
-
-## How It Works
-
-### Architecture
-
-1. **Server starts** on port 3000 with Express.js
-2. **Database connects** – SQLite file (`tasks.db`) is opened or created automatically
-3. **Table setup** – `tasks` table is created if it doesn't exist
-4. **Seeding** – Three example tasks are inserted only if the table is empty (count check ensures this happens once)
-5. **CRUD operations** – Express routes execute parameterized SQL queries instead of modifying arrays
-6. **Persistence** – All changes are written to disk immediately via SQLite
-7. **JSON responses** – Query results are converted to JSON for the API client
-
-### Key Differences from Assignment 1
-
-| Aspect | Assignment 1 (In-Memory) | Assignment 2 (SQLite) |
-|--------|-------------------------|------------------------|
-| Storage | JavaScript array | SQLite database file |
-| Data after restart | ❌ Lost | ✅ Persists |
-| Setup time | Instant | Automatic (first run) |
-| ID generation | Array index + 1 | SQLite AUTOINCREMENT |
-| Query method | Array.find() / .map() | SQL SELECT/INSERT/UPDATE/DELETE |
-| Scalability | Megabytes | Gigabytes |
-
-### Important Note
-
-Data is now **persistent** – tasks survive server restarts. The database file `tasks.db` is automatically created on first run and is git-ignored so each clone starts with fresh example data.
-
----
-
-## Testing the API
-
-### Method 1: Swagger UI (Interactive)
-
-```
-http://localhost:3000/docs
-```
-
-Click on any endpoint to expand, then press **Try it out** to send requests directly from the browser.
+Open your browser to `http://localhost:3000/docs` and use the built-in interface to test all endpoints.
 
 ### Method 2: cURL (Command Line)
 
@@ -314,7 +289,7 @@ curl http://localhost:3000/tasks
 # Create a task
 curl -X POST http://localhost:3000/tasks \
   -H "Content-Type: application/json" \
-  -d '{"title":"New Task"}'
+  -d '{"title":"Test task"}'
 
 # Get a specific task
 curl http://localhost:3000/tasks/1
@@ -322,40 +297,218 @@ curl http://localhost:3000/tasks/1
 # Update a task
 curl -X PUT http://localhost:3000/tasks/1 \
   -H "Content-Type: application/json" \
-  -d '{"title":"Updated Task","done":true}'
+  -d '{"title":"Updated","done":true}'
 
 # Delete a task
 curl -X DELETE http://localhost:3000/tasks/1
 
-# Get all tasks again (to verify persistence)
+# Health check
+curl http://localhost:3000/health
+```
+
+### Method 3: Postman or Hoppscotch
+
+Import the Swagger endpoint: `http://localhost:3000/docs` into Postman or use the free web version [Hoppscotch](https://hoppscotch.io).
+
+---
+
+## Proving Data Persistence
+
+This is the core requirement of Assignment A3: demonstrating that data survives container restarts thanks to Docker volumes.
+
+### Step-by-Step Persistence Proof
+
+**1. Create a new task:**
+```bash
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Docker volume persistence test"}'
+```
+
+Expected response: `201 Created` with task `id: 4`.
+
+**2. Restart the container:**
+```bash
+docker restart flyrank-task-api-app-1
+```
+
+**3. Fetch all tasks again:**
+```bash
 curl http://localhost:3000/tasks
 ```
 
-### Method 3: DB Browser for SQLite (Direct Database Inspection)
+Expected response: All 4 tasks including the one you just created.
 
-Open `tasks.db` in DB Browser for SQLite to visually inspect the database contents, run custom SQL queries, and verify that changes made via the API are persisted to disk.
+**✅ If task #4 is still there, persistence is proven!**
+
+---
+
+## Project Structure
+
+```
+flyrank-task-api/
+├── index.js                   # Express app + SQLite setup
+├── openapi.json              # Swagger/OpenAPI specification
+├── package.json              # Node dependencies
+├── package-lock.json         # Locked dependency versions
+├── Dockerfile                # Container build instructions
+├── docker-compose.yml        # Multi-container orchestration
+├── .dockerignore             # Ignore node_modules in build context
+├── .gitignore                # Ignore .env, node_modules, tasks.db
+├── .env.example              # Template for environment variables
+├── README.md                 # This file
+└── sql-screenshot.png        # Screenshot of SQLite data (A2 proof)
+```
+
+---
+
+## Docker Commands Reference
+
+### Common Operations
+
+```bash
+# Start the stack (detached mode)
+docker compose up -d --build
+
+# View logs in real-time
+docker compose logs -f
+
+# Stop the stack (containers stopped, data persists)
+docker compose down
+
+# Stop and delete everything (data persists in volume)
+docker compose down
+
+# Stop and delete volumes (WARNING: deletes data)
+docker compose down -v
+
+# Restart a specific container
+docker restart flyrank-task-api-app-1
+
+# View running containers
+docker ps
+
+# View all containers (including stopped)
+docker ps -a
+
+# View Docker volumes
+docker volume ls
+
+# Inspect a volume
+docker volume inspect flyrank-task-api_sqlite_data
+
+# Delete unused volumes
+docker volume prune
+```
+
+---
+
+## Why Docker Volumes for Persistence?
+
+**Without a volume:**
+- Container stops → data in memory or temporary filesystem → lost
+
+**With a named volume:**
+- Container stops → data written to Docker-managed volume → persists on host
+- Container restarts → volume remounts to `/app/data/tasks.db` → data is still there
+
+This is exactly what allows `docker compose down && docker compose up` to preserve your tasks across full stack restarts.
+
+---
+
+## How It Works (The Three Storage Swaps)
+
+| Assignment | Storage Method | Data Survives Restart? | Commands |
+|------------|---------------|-----------------------|----------|
+| **A1** | In-memory array | ❌ No | `node index.js` |
+| **A2** | SQLite file | ✅ Yes (same machine) | `node index.js` |
+| **A3** | SQLite + Docker volume | ✅ Yes (reproducible everywhere) | `docker compose up` |
+
+The API stays exactly the same across all three. Only the storage layer changes—that's the whole point of Assignment A3.
+
+---
+
+## Technology Stack
+
+* **Runtime:** Node.js v20 (Alpine Linux base)
+* **Framework:** Express.js
+* **Database Driver:** better-sqlite3 (synchronous SQLite bindings)
+* **Database:** SQLite (file-based, single-file, zero-config)
+* **Containerization:** Docker & Docker Compose
+* **Documentation:** Swagger UI (OpenAPI 3.0)
+* **Language:** JavaScript (ES6)
 
 ---
 
 ## Stages Completed
 
-✅ **Stage 0** – Create SQLite database, tasks table, and seed data  
-✅ **Stage 1** – Read from database using SELECT queries  
-✅ **Stage 2** – Insert new tasks with POST /tasks  
-✅ **Stage 3** – Update and delete tasks with PUT and DELETE  
-✅ **Stage 4** – Explored SQLite with manual SQL queries (COUNT, WHERE, etc.)  
-✅ **Stage 5** – Published to GitHub with documentation and screenshots  
-✅ **Stage 6 (Bonus)** – AI vs Me code review and comparison  
+✅ **Stage 0** – Set up .gitignore and verified Docker availability  
+✅ **Stage 1** – Connected app to environment variables and created SQLite table  
+✅ **Stage 2** – Implemented read endpoints (GET /tasks, GET /tasks/:id)  
+✅ **Stage 3** – Implemented full CRUD (POST, PUT, DELETE)  
+✅ **Stage 4** – Created Dockerfile and docker-compose.yml; proved persistence  
+✅ **Stage 5** – Published to GitHub with documentation and persistence proof  
+
+---
+
+## Troubleshooting
+
+### Port 3000 already in use
+
+If you see `bind: address already in use`, something is already listening on port 3000.
+
+**Fix:**
+```bash
+# Kill any local Node processes
+taskkill /f /im node.exe
+
+# Or specify a different port in docker-compose.yml
+# Change ports: ["3000:3000"] to ["3001:3000"]
+```
+
+### Container exits immediately
+
+Check the logs:
+```bash
+docker compose logs
+```
+
+**Common causes:**
+- Missing `.env` file (should exist, can be empty)
+- Database directory doesn't exist (index.js auto-creates it)
+- Syntax error in `index.js`
+
+### Data disappeared after restart
+
+Verify the volume is correctly mounted:
+```bash
+docker volume inspect flyrank-task-api_sqlite_data
+
+# Should show a "Mountpoint" on your host filesystem
+```
+
+If the volume exists but data is gone, check that:
+1. `.env` has `DB_PATH=/app/data/tasks.db`
+2. `docker-compose.yml` has `sqlite_data:/app/data` (NOT `/app`)
+3. No `DROP TABLE` statement in `index.js`
+
+### Cannot connect to database
+
+Ensure the `/app/data` directory is created inside the container. The index.js code handles this:
+```javascript
+if (dbDir && !fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
+```
 
 ---
 
 ## Contributing
 
-This is a demo project, but contributions are welcome! Feel free to:
-
-* Open an issue to report bugs or suggest features
-* Submit a pull request to improve functionality or documentation
-* Add optional extras (search with LIKE, filtering, sorting, timestamps, etc.)
+Contributions are welcome! Feel free to:
+- Open an issue to report bugs or suggest features
+- Submit a pull request with improvements
+- Add optional stretch features (Redis cache, database indexes, migrations, etc.)
 
 ---
 
@@ -369,4 +522,6 @@ This project is open-source and available under the **MIT License**.
 
 **Toni Ihab Youssef**
 
-FlyRank AI Internship · Backend Track
+FlyRank AI Internship · Backend Track · Assignment A3 / BE-04 (Containerize your stack)
+
+---
