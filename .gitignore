@@ -1,3 +1,6 @@
 node_modules/
 .env
 tasks.db
+*.db
+*.sqlite
+*.sqlite3
