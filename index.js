@@ -4,15 +4,22 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./openapi.json');
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// Stage 0: Open (and automatically create if missing) tasks.db
-const db = new Database('tasks.db');
+const path = require('path');
+const fs = require('fs');
 
-// Stage 0: Create the tasks table if it doesn't already exist
+// Keep the database location configurable for Docker and local development.
+const dbPath = process.env.DB_PATH || 'tasks.db';
+const dbDir = path.dirname(dbPath);
+fs.mkdirSync(dbDir, { recursive: true });
+
+const db = new Database(dbPath);
+
+// Create the tasks table if it doesn't already exist
 db.prepare(`
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,7 +28,7 @@ db.prepare(`
   )
 `).run();
 
-// Stage 0: Seed three example tasks ONLY if the table is empty
+// Seed three example tasks ONLY if the table is empty
 const countCheck = db.prepare('SELECT COUNT(*) as count FROM tasks').get();
 if (countCheck.count === 0) {
   const insert = db.prepare('INSERT INTO tasks (title, done) VALUES (?, ?)');
