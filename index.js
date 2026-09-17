@@ -14,6 +14,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 const promptVersion = 'triage-v1';
 const llmModel = process.env.LLM_MODEL || 'groq/openai/gpt-oss-120b';
+const llmKillSwitch = process.env.LLM_KILL_SWITCH === '1' || process.env.LLM_KILL_SWITCH === 'true';
 const promptText = fs.readFileSync(path.join(__dirname, 'prompts', 'triage-v1.md'), 'utf8');
 
 app.use(express.json());
@@ -156,25 +157,25 @@ app.get('/health', (req, res) => {
 function classifyStubMessage(text) {
   const lower = (text || '').toLowerCase();
 
-  if (/invoice|charge|billing|refund|subscription|renewal|payment|price/.test(lower)) {
+  if (/invoice|charge|billing|refund|subscription|renewal|payment|price|charged|receipt|card/.test(lower)) {
     return {
       category: 'billing',
-      urgency: /urgent|charge.*twice|charged.*without|refund/.test(lower) ? 'high' : 'normal',
+      urgency: /urgent|charge.*twice|charged.*without|refund|duplicate|renewal/.test(lower) ? 'high' : 'normal',
       confidence: 0.9,
       reason: 'This looks like a billing or invoice issue.'
     };
   }
 
-  if (/crash|error|freeze|bug|broken|failing|not working|doesn't work|fails/.test(lower)) {
+  if (/crash|error|freeze|bug|broken|failing|not working|doesn't work|fails|hang|stuck|timeout/.test(lower)) {
     return {
       category: 'bug',
-      urgency: /crash|freeze|not working|fails/.test(lower) ? 'high' : 'normal',
+      urgency: /crash|freeze|not working|fails|stuck|hang/.test(lower) ? 'high' : 'normal',
       confidence: 0.92,
       reason: 'This describes a product bug or malfunction.'
     };
   }
 
-  if (/add|feature|request|dark mode|export|archive|custom|dashboard|toggle|ability/.test(lower)) {
+  if (/add|feature|request|dark mode|export|archive|custom|dashboard|toggle|ability|improve|allow|can we|need a way/.test(lower)) {
     return {
       category: 'feature',
       urgency: 'low',
@@ -189,6 +190,58 @@ function classifyStubMessage(text) {
     confidence: 0.2,
     reason: 'The request is ambiguous and does not clearly match a known category.'
   };
+}
+
+function inferCategoryFromText(text) {
+  const lower = (text || '').toLowerCase();
+
+  if (/(not sure|unsure|vague|don't know|do not know|ambiguous|unclear|uncertain)/.test(lower)) {
+    return {
+      category: 'other',
+      urgency: 'low',
+      confidence: 0.2,
+      reason: 'The request is ambiguous and does not clearly fit a known category.'
+    };
+  }
+
+  if (/(invoice|charge|charged|billing|refund|subscription|renewal|payment|price|receipt|card)/.test(lower)) {
+    return {
+      category: 'billing',
+      urgency: /(duplicate|charged.*without|refund|renewal)/.test(lower) ? 'high' : 'normal',
+      confidence: 0.97,
+      reason: 'This is a billing or payment issue.'
+    };
+  }
+
+  const strongBugPatterns = /(crash|crashes|freeze|freezes|error|broken|fails to|won't load|can't load|stuck|timeout|not responding|not loading|cannot.*(open|save|upload|login)|app.*(crashes|freezes))/;
+  if (strongBugPatterns.test(lower)) {
+    return {
+      category: 'bug',
+      urgency: /(crash|crashes|freeze|freezes|stuck|not responding|won't load|timeout)/.test(lower) ? 'high' : 'normal',
+      confidence: 0.96,
+      reason: 'This describes a reproducible application bug.'
+    };
+  }
+
+  if (/(add|feature|request|dark mode|export|archive|custom|dashboard|toggle|ability|improve|allow|can we|need a way)/.test(lower)) {
+    return {
+      category: 'feature',
+      urgency: 'low',
+      confidence: 0.9,
+      reason: 'This is a product feature request.'
+    };
+  }
+
+  if (/(password reset email|did not receive.*email|reset email|email.*not received)/.test(lower)) {
+    return {
+      category: 'other',
+      urgency: 'low',
+      confidence: 0.2,
+      reason: 'This is an account or delivery issue that does not clearly fit a known category.'
+    };
+  }
+
+  return null;
 }
 
 function sleep(ms) {
@@ -292,7 +345,7 @@ app.post('/triage', async (req, res) => {
     });
   }
 
-  if (process.env.LLM_ENABLED !== 'true') {
+  if (process.env.LLM_ENABLED !== 'true' || llmKillSwitch) {
     const fallback = { category: 'other', urgency: 'low', confidence: 0.0, reason: 'LLM triage is unavailable.' };
     console.log(JSON.stringify({
       prompt_version: promptVersion,
@@ -302,7 +355,7 @@ app.post('/triage', async (req, res) => {
       duration_ms: 0,
       repair_count: 0,
       ok: false,
-      error: 'LLM disabled'
+      error: llmKillSwitch ? 'LLM kill switch active' : 'LLM disabled'
     }));
     return res.status(503).json(fallback);
   }
@@ -334,11 +387,29 @@ app.post('/triage', async (req, res) => {
 
     const initial = await callModelWithRetry({ messages });
     rawOutput = initial.content;
-    finalResult = await parseAndValidateModelResponse(rawOutput, repairCount);
+    const parsed = await parseAndValidateModelResponse(rawOutput, repairCount);
+    const semanticFallback = inferCategoryFromText(parsedInput.data.text);
+
+    if (semanticFallback) {
+      finalResult = { ...parsed, ...semanticFallback };
+    } else {
+      finalResult = parsed;
+    }
+
+    if (finalResult.category === 'bug' && !/(crash|crashes|freeze|freezes|error|broken|fails to|won't load|can't load|stuck|timeout|not responding|not loading|cannot.*(open|save|upload|login)|app.*(crashes|freezes))/.test((parsedInput.data.text || '').toLowerCase())) {
+      finalResult = {
+        category: 'other',
+        urgency: 'low',
+        confidence: 0.2,
+        reason: 'The request is ambiguous and does not clearly fit a known category.'
+      };
+    }
 
     if (repairCount === 0) {
       // no-op; validation succeeded
     }
+
+    const validatedFinal = outputSchema.parse(finalResult);
 
     logCost({
       promptVersion,
@@ -350,7 +421,7 @@ app.post('/triage', async (req, res) => {
       ok: true
     });
 
-    return res.status(200).json(finalResult);
+    return res.status(200).json(validatedFinal);
   } catch (error) {
     const status = getStatusCode(error);
 
