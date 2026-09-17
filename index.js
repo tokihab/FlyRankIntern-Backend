@@ -1,12 +1,20 @@
+require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const Database = require('better-sqlite3');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('./openapi.json');
+const OpenAI = require('openai');
 const { supabase, isSupabaseConfigured, createTokenClient } = require('./lib/supabase');
 const requireAuth = require('./middleware/auth');
+const { inputSchema, outputSchema } = require('./src/llm/schema');
 
 const app = express();
 const port = process.env.PORT || 3000;
+const promptVersion = 'triage-v1';
+const llmModel = process.env.LLM_MODEL || 'groq/openai/gpt-oss-120b';
+const promptText = fs.readFileSync(path.join(__dirname, 'prompts', 'triage-v1.md'), 'utf8');
 
 app.use(express.json());
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
@@ -109,9 +117,6 @@ app.post('/auth/logout', requireAuth, async (req, res) => {
   return res.status(204).send();
 });
 
-const path = require('path');
-const fs = require('fs');
-
 // Keep the database location configurable for Docker and local development.
 const dbPath = process.env.DB_PATH || 'tasks.db';
 const dbDir = path.dirname(dbPath);
@@ -146,6 +151,300 @@ app.get('/', (req, res) => {
 // Stage 1: Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: "ok" });
+});
+
+function classifyStubMessage(text) {
+  const lower = (text || '').toLowerCase();
+
+  if (/invoice|charge|billing|refund|subscription|renewal|payment|price/.test(lower)) {
+    return {
+      category: 'billing',
+      urgency: /urgent|charge.*twice|charged.*without|refund/.test(lower) ? 'high' : 'normal',
+      confidence: 0.9,
+      reason: 'This looks like a billing or invoice issue.'
+    };
+  }
+
+  if (/crash|error|freeze|bug|broken|failing|not working|doesn't work|fails/.test(lower)) {
+    return {
+      category: 'bug',
+      urgency: /crash|freeze|not working|fails/.test(lower) ? 'high' : 'normal',
+      confidence: 0.92,
+      reason: 'This describes a product bug or malfunction.'
+    };
+  }
+
+  if (/add|feature|request|dark mode|export|archive|custom|dashboard|toggle|ability/.test(lower)) {
+    return {
+      category: 'feature',
+      urgency: 'low',
+      confidence: 0.8,
+      reason: 'This is a feature request or product enhancement.'
+    };
+  }
+
+  return {
+    category: 'other',
+    urgency: 'low',
+    confidence: 0.2,
+    reason: 'The request is ambiguous and does not clearly match a known category.'
+  };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getStatusCode(error) {
+  if (!error) return null;
+  const status = error.status ?? error.statusCode ?? error.response?.status ?? error.code;
+  return Number(status) || null;
+}
+
+function logCost({ promptVersion, model, inputTokens = 0, outputTokens = 0, durationMs = 0, repairCount = 0, ok = true, error = null }) {
+  const entry = {
+    prompt_version: promptVersion,
+    model,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    duration_ms: durationMs,
+    repair_count: repairCount,
+    ok,
+    error: error ? String(error) : null
+  };
+
+  console.log(JSON.stringify(entry));
+}
+
+async function callModelWithRetry({ messages, attempt = 0 }) {
+  const client = new OpenAI({
+    baseURL: process.env.LLM_BASE_URL,
+    apiKey: process.env.LLM_API_KEY,
+    timeout: 30000,
+    maxRetries: 0
+  });
+
+  try {
+    const startedAt = Date.now();
+    const completion = await client.chat.completions.create({
+      model: llmModel,
+      messages,
+      temperature: 0.1,
+      response_format: { type: 'json_object' }
+    });
+
+    const durationMs = Date.now() - startedAt;
+    const usage = completion?.usage || {};
+    const content = completion?.choices?.[0]?.message?.content ?? '';
+
+    return {
+      content,
+      usage,
+      durationMs
+    };
+  } catch (error) {
+    const status = getStatusCode(error);
+    const shouldRetry = (status === 429 || (status >= 500 && status <= 599)) && attempt < 2;
+
+    if (!shouldRetry) {
+      throw error;
+    }
+
+    const backoffMs = 500 * (2 ** attempt) + Math.floor(Math.random() * 250);
+    await sleep(backoffMs);
+    return callModelWithRetry({ messages, attempt: attempt + 1 });
+  }
+}
+
+async function parseAndValidateModelResponse(rawText, repairCount) {
+  let parsedData;
+
+  try {
+    parsedData = JSON.parse(rawText);
+  } catch (parseError) {
+    const error = new Error(`JSON parse failed: ${parseError.message}`);
+    error.rawOutput = rawText;
+    throw error;
+  }
+
+  const validation = outputSchema.safeParse(parsedData);
+  if (validation.success) {
+    return validation.data;
+  }
+
+  const zodError = validation.error.issues.map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`).join('; ');
+  const error = new Error(`Model output rejected: ${zodError}`);
+  error.rawOutput = rawText;
+  error.zodError = zodError;
+  error.repairCount = repairCount;
+  throw error;
+}
+
+app.post('/triage', async (req, res) => {
+  const parsedInput = inputSchema.safeParse(req.body);
+
+  if (!parsedInput.success) {
+    const issue = parsedInput.error.issues[0];
+    const field = issue?.path?.[0] || 'body';
+    return res.status(400).json({
+      error: `Invalid ${field}`,
+      details: issue?.message || 'Request body is invalid'
+    });
+  }
+
+  if (process.env.LLM_ENABLED !== 'true') {
+    const fallback = { category: 'other', urgency: 'low', confidence: 0.0, reason: 'LLM triage is unavailable.' };
+    console.log(JSON.stringify({
+      prompt_version: promptVersion,
+      model: llmModel,
+      input_tokens: 0,
+      output_tokens: 0,
+      duration_ms: 0,
+      repair_count: 0,
+      ok: false,
+      error: 'LLM disabled'
+    }));
+    return res.status(503).json(fallback);
+  }
+
+  if (process.env.LLM_STUB === '1') {
+    const stub = classifyStubMessage(parsedInput.data.text);
+    const validated = outputSchema.parse(stub);
+    logCost({
+      promptVersion,
+      model: llmModel,
+      inputTokens: 0,
+      outputTokens: 0,
+      durationMs: 0,
+      repairCount: 0,
+      ok: true
+    });
+    return res.status(200).json(validated);
+  }
+
+  let repairCount = 0;
+  let rawOutput = '';
+  let finalResult;
+
+  try {
+    const messages = [
+      { role: 'system', content: promptText },
+      { role: 'user', content: parsedInput.data.text }
+    ];
+
+    const initial = await callModelWithRetry({ messages });
+    rawOutput = initial.content;
+    finalResult = await parseAndValidateModelResponse(rawOutput, repairCount);
+
+    if (repairCount === 0) {
+      // no-op; validation succeeded
+    }
+
+    logCost({
+      promptVersion,
+      model: llmModel,
+      inputTokens: initial.usage?.prompt_tokens ?? 0,
+      outputTokens: initial.usage?.completion_tokens ?? 0,
+      durationMs: initial.durationMs,
+      repairCount,
+      ok: true
+    });
+
+    return res.status(200).json(finalResult);
+  } catch (error) {
+    const status = getStatusCode(error);
+
+    if (status === 504 || status === 408 || error?.name === 'TimeoutError') {
+      logCost({
+        promptVersion,
+        model: llmModel,
+        inputTokens: 0,
+        outputTokens: 0,
+        durationMs: 0,
+        repairCount,
+        ok: false,
+        error: 'Gateway Timeout'
+      });
+      return res.status(504).json({ error: 'Gateway Timeout while calling the model' });
+    }
+
+    if (repairCount === 0 && error.rawOutput) {
+      repairCount += 1;
+
+      try {
+        const messages = [
+          { role: 'system', content: promptText },
+          { role: 'user', content: parsedInput.data.text },
+          { role: 'assistant', content: error.rawOutput },
+          { role: 'user', content: `Your previous answer was rejected for this reason: ${error.zodError || error.message}. Return only corrected JSON matching the schema.` }
+        ];
+
+        const repaired = await callModelWithRetry({ messages });
+        rawOutput = repaired.content;
+        finalResult = await parseAndValidateModelResponse(rawOutput, repairCount);
+
+        logCost({
+          promptVersion,
+          model: llmModel,
+          inputTokens: repaired.usage?.prompt_tokens ?? 0,
+          outputTokens: repaired.usage?.completion_tokens ?? 0,
+          durationMs: repaired.durationMs,
+          repairCount,
+          ok: true
+        });
+
+        return res.status(200).json(finalResult);
+      } catch (repairError) {
+        const quarantinePath = path.join(__dirname, 'logs', 'quarantine.jsonl');
+        fs.mkdirSync(path.dirname(quarantinePath), { recursive: true });
+        const quarantineEntry = {
+          timestamp: new Date().toISOString(),
+          prompt_version: promptVersion,
+          model: llmModel,
+          raw_output: rawOutput,
+          error: repairError?.message || String(repairError)
+        };
+        fs.appendFileSync(quarantinePath, `${JSON.stringify(quarantineEntry)}\n`);
+
+        logCost({
+          promptVersion,
+          model: llmModel,
+          inputTokens: 0,
+          outputTokens: 0,
+          durationMs: 0,
+          repairCount,
+          ok: false,
+          error: repairError?.message || String(repairError)
+        });
+
+        return res.status(422).json({ error: 'Model output was invalid and the repair attempt also failed.' });
+      }
+    }
+
+    const quarantinePath = path.join(__dirname, 'logs', 'quarantine.jsonl');
+    fs.mkdirSync(path.dirname(quarantinePath), { recursive: true });
+    const quarantineEntry = {
+      timestamp: new Date().toISOString(),
+      prompt_version: promptVersion,
+      model: llmModel,
+      raw_output: rawOutput,
+      error: error?.message || String(error)
+    };
+    fs.appendFileSync(quarantinePath, `${JSON.stringify(quarantineEntry)}\n`);
+
+    logCost({
+      promptVersion,
+      model: llmModel,
+      inputTokens: 0,
+      outputTokens: 0,
+      durationMs: 0,
+      repairCount,
+      ok: false,
+      error: error?.message || String(error)
+    });
+
+    return res.status(422).json({ error: 'Model output could not be validated.' });
+  }
 });
 
 // Stage 1: Read all tasks from SQLite

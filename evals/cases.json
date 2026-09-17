@@ -1,0 +1,10 @@
+[
+  { "input": "My invoice shows two charges for the same plan this month.", "expectedCategory": "billing" },
+  { "input": "The dashboard crashes when I upload a CSV file.", "expectedCategory": "bug" },
+  { "input": "Please add export to CSV for the reporting screen.", "expectedCategory": "feature" },
+  { "input": "I did not receive the password reset email.", "expectedCategory": "other" },
+  { "input": "The mobile app freezes on startup after updating.", "expectedCategory": "bug" },
+  { "input": "Can we get a way to archive completed jobs?", "expectedCategory": "feature" },
+  { "input": "My subscription renewal was charged without warning.", "expectedCategory": "billing" },
+  { "input": "I am not sure if this is a bug or a product request, and the details are vague.", "expectedCategory": "other" }
+]

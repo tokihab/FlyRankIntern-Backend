@@ -2,9 +2,9 @@ require('dotenv').config();
 const OpenAI = require('openai');
 
 async function main() {
-  const baseURL = process.env.LLM_BASE_URL;
+  const baseURL = process.env.LLM_BASE_URL || 'https://api.groq.com/openai/v1';
   const apiKey = process.env.LLM_API_KEY;
-  const model = process.env.LLM_MODEL || 'groq/openai/gpt-oss-120b';
+  const model = process.env.LLM_MODEL || 'openai/gpt-oss-120b';
 
   if (!baseURL || !apiKey) {
     console.log('LLM not configured: set LLM_BASE_URL and LLM_API_KEY in .env');
