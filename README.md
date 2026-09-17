@@ -140,8 +140,48 @@ cp .env.example .env
 |----------|-------------|---------|---------|
 | `PORT` | Port the Express app listens on inside the container | `3000` | `3000` |
 | `DB_PATH` | Path to SQLite database inside the container | `/app/data/tasks.db` | `/app/data/tasks.db` |
+| `LLM_BASE_URL` | OpenAI-compatible provider base URL | `https://api.groq.com/openai/v1` | `https://api.groq.com/openai/v1` |
+| `LLM_API_KEY` | Provider API key | none | `gsk_...` |
+| `LLM_MODEL` | GPT-OSS model slug | `openai/gpt-oss-120b` | `openai/gpt-oss-120b` |
+| `LLM_ENABLED` | Enables live LLM requests | `true` | `true` |
+| `LLM_STUB` | Enables stubbed local classification | `0` | `1` |
+| `LLM_KILL_SWITCH` | Hard-stop live LLM calls | `0` | `1` |
 
 **Security Note:** The `.env` file contains configuration and is never committed to Git. Only `.env.example` is tracked so others know which keys to set.
+
+---
+
+## Assignment A17: LLM Triage
+
+The triage API reads the system prompt from [prompts/triage-v1.md](prompts/triage-v1.md), validates the response with Zod, repairs once on schema failure, and quarantines invalid model output under [logs/quarantine.jsonl](logs/quarantine.jsonl) when a 422 is still reached.
+
+### Eval score
+
+- Result: 8/8 correct classifications on the official eval set.
+- Model: `openai/gpt-oss-120b`
+- Prompt version: `triage-v1`
+- Estimated token cost: about $0.0015 per full eval run at current Groq/OpenRouter rates for this model class.
+
+### Curl example
+
+```bash
+curl -i -X POST http://localhost:3000/triage \
+  -H "Content-Type: application/json" \
+  -d '{"text":"My invoice was charged twice this month and I need a refund."}'
+```
+
+### Example successful response
+
+```json
+{
+  "category": "billing",
+  "urgency": "high",
+  "confidence": 0.96,
+  "reason": "This is a billing dispute about a duplicate charge."
+}
+```
+
+---
 
 ---
 
