@@ -619,6 +619,34 @@ For the containerized stack:
 docker compose up -d --build
 ```
 
+---
+
+## Bonus Stage: The AI Rematch
+
+### Generation Prompt
+> "Build a standalone Node.js Express implementation of our AI Support Triage service inside a quarantined folder named ai-version/. ..."
+
+### Benchmark Results
+- **Hand-built Implementation**: 8 / 8 cases passed (100%)
+- **AI-generated Implementation**: 8 / 8 cases passed (100%)
+
+### Comparative Analysis
+
+#### 1. What the AI did better
+- **Code Organization & Modularity**: The quarantine version kept the triage service neatly isolated and self-contained, with clearer separation between validation, client setup, retry logic, parsing, and logging than the larger root application.
+- **Single-Responsibility Structure**: The AI version isolated the LLM call, schema enforcement, and quarantine write path into compact helper functions without the larger project baggage from the auth, database, and Swagger layers.
+
+#### 2. What the AI got wrong or silently skipped
+- **Silent Defaults & Retry Policies**: The AI implementation did set a 30-second timeout and limited retries to 429/5xx, but it also relied on a generic catch path rather than making the status inspection more explicit. The stricter hand-built version applied more deliberate guardrails around the triage flow and ambiguous fallback behavior.
+- **Semantic Overrides**: The quarantine version did not include the bespoke semantic override that was added in the root implementation to explicitly keep ambiguous cases in the "other" bucket and to prevent false positives on vague requests. That mattered in the rematch benchmark because the model can otherwise guess too aggressively.
+- **Quarantine Logging**: The AI version did append malformed model output to the quarantine log, but it did so with simpler, less contextual entries and without the same amount of defensive hardening present in the hand-built implementation.
+
+#### 3. What the prompt missed and what the AI assumed
+- **Semantic Overrides**: The prompt did not specify how aggressively the model should map ambiguous phrasing, especially around partially described billing, bug, or feature requests. The AI chose a more conventional "let the model classify" approach, while the hand-built implementation added stronger disambiguation rules to enforce the "when unsure -> other" requirement.
+- **Safety Boundaries**: The prompt required safe handling of malformed output and a kill switch, but it did not explicitly force a semantic rule for ambiguous cases. That left the AI implementation more dependent on the model's default behavior instead of an explicit operational policy.
+
+---
+
 ### Auth Endpoint Reference
 
 | URL | Method | Auth | Response codes |
