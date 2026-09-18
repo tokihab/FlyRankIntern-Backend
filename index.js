@@ -9,6 +9,8 @@ const OpenAI = require('openai');
 const { supabase, isSupabaseConfigured, createTokenClient } = require('./lib/supabase');
 const requireAuth = require('./middleware/auth');
 const { inputSchema, outputSchema } = require('./src/llm/schema');
+const { sleep, getStatusCode, isRetryableStatus, getBackoffMs } = require('./src/llm/retry');
+const { quarantineOutput } = require('./src/llm/quarantine');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -244,16 +246,6 @@ function inferCategoryFromText(text) {
   return null;
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getStatusCode(error) {
-  if (!error) return null;
-  const status = error.status ?? error.statusCode ?? error.response?.status ?? error.code;
-  return Number(status) || null;
-}
-
 function logCost({ promptVersion, model, inputTokens = 0, outputTokens = 0, durationMs = 0, repairCount = 0, ok = true, error = null }) {
   const entry = {
     prompt_version: promptVersion,
@@ -297,14 +289,13 @@ async function callModelWithRetry({ messages, attempt = 0 }) {
     };
   } catch (error) {
     const status = getStatusCode(error);
-    const shouldRetry = (status === 429 || (status >= 500 && status <= 599)) && attempt < 2;
+    const shouldRetry = isRetryableStatus(status) && attempt < 2;
 
     if (!shouldRetry) {
       throw error;
     }
 
-    const backoffMs = 500 * (2 ** attempt) + Math.floor(Math.random() * 250);
-    await sleep(backoffMs);
+    await sleep(getBackoffMs(attempt));
     return callModelWithRetry({ messages, attempt: attempt + 1 });
   }
 }
@@ -466,16 +457,7 @@ app.post('/triage', async (req, res) => {
 
         return res.status(200).json(finalResult);
       } catch (repairError) {
-        const quarantinePath = path.join(__dirname, 'logs', 'quarantine.jsonl');
-        fs.mkdirSync(path.dirname(quarantinePath), { recursive: true });
-        const quarantineEntry = {
-          timestamp: new Date().toISOString(),
-          prompt_version: promptVersion,
-          model: llmModel,
-          raw_output: rawOutput,
-          error: repairError?.message || String(repairError)
-        };
-        fs.appendFileSync(quarantinePath, `${JSON.stringify(quarantineEntry)}\n`);
+        quarantineOutput({ promptVersion, model: llmModel, rawOutput, error: repairError });
 
         logCost({
           promptVersion,
@@ -492,16 +474,7 @@ app.post('/triage', async (req, res) => {
       }
     }
 
-    const quarantinePath = path.join(__dirname, 'logs', 'quarantine.jsonl');
-    fs.mkdirSync(path.dirname(quarantinePath), { recursive: true });
-    const quarantineEntry = {
-      timestamp: new Date().toISOString(),
-      prompt_version: promptVersion,
-      model: llmModel,
-      raw_output: rawOutput,
-      error: error?.message || String(error)
-    };
-    fs.appendFileSync(quarantinePath, `${JSON.stringify(quarantineEntry)}\n`);
+    quarantineOutput({ promptVersion, model: llmModel, rawOutput, error });
 
     logCost({
       promptVersion,
