@@ -4,11 +4,11 @@ const { fetchHtml } = require('./fetcher');
 const FIRST_CATALOGUE_PAGE = 'https://books.toscrape.com/catalogue/page-1.html';
 const MAX_CATALOGUE_PAGES = 3;
 
-async function discoverBooks() {
+async function discoverBooks(startUrl = FIRST_CATALOGUE_PAGE) {
   const pages = [];
   const books = [];
   const seenProducts = new Set();
-  let currentUrl = FIRST_CATALOGUE_PAGE;
+  let currentUrl = startUrl;
 
   while (currentUrl && pages.length < MAX_CATALOGUE_PAGES) {
     const html = await fetchHtml(currentUrl);

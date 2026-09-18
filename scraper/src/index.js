@@ -12,10 +12,10 @@ async function writeRunReport(report) {
 	await fs.writeFile(`${OUTPUT_DIR}/run-report.json`, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 }
 
-async function run() {
+async function run(startUrl) {
 	const startTime = new Date();
 	const startedAt = Date.now();
-	const { books } = await discoverBooks();
+	const { books } = await discoverBooks(startUrl);
 	const { records, failedPages } = await extractBooks(books);
 	const { validRecords, errors } = await normalizeAndStore(records);
 

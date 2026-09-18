@@ -9,7 +9,7 @@ const OpenAI = require('openai');
 const { supabase, isSupabaseConfigured, createTokenClient } = require('./lib/supabase');
 const requireAuth = require('./middleware/auth');
 const { inputSchema, outputSchema } = require('./src/llm/schema');
-const { sleep, getStatusCode, isRetryableStatus, getBackoffMs } = require('./src/llm/retry');
+const { sleep, getStatusCode, isRetryableError, getNetworkErrorCode, getBackoffMs } = require('./src/llm/retry');
 const { quarantineOutput } = require('./src/llm/quarantine');
 const { run: runScraper } = require('./scraper/src');
 
@@ -186,7 +186,18 @@ app.post('/api/scraper/trigger', async (req, res) => {
     return res.status(202).json({ status: 'running' });
   }
 
-  scraperRunPromise = runScraper();
+  const targetUrl = typeof req.body?.targetUrl === 'string' && req.body.targetUrl.trim()
+    ? req.body.targetUrl.trim()
+    : undefined;
+  if (targetUrl) {
+    try {
+      const parsedUrl = new URL(targetUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('Only HTTP and HTTPS targets are supported');
+    } catch (error) {
+      return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid targetUrl' });
+    }
+  }
+  scraperRunPromise = runScraper(targetUrl);
   try {
     await scraperRunPromise;
     return res.status(202).json({ status: 'completed', report: readScraperOutput('run-report.json', null) });
@@ -330,12 +341,13 @@ async function callModelWithRetry({ messages, attempt = 0 }) {
     };
   } catch (error) {
     const status = getStatusCode(error);
-    const shouldRetry = isRetryableStatus(status) && attempt < 2;
+    const shouldRetry = isRetryableError(error) && attempt < 2;
 
     if (!shouldRetry) {
       throw error;
     }
 
+    console.error(JSON.stringify({ event: 'llm.retry', attempt: attempt + 1, status, network_code: getNetworkErrorCode(error), error: error?.message || String(error) }));
     await sleep(getBackoffMs(attempt));
     return callModelWithRetry({ messages, attempt: attempt + 1 });
   }

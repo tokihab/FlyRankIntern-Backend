@@ -22,8 +22,9 @@ function mockDecision(prompt: string): DecisionResult {
 }
 
 function isRetryable(error: unknown): boolean {
-  const status = typeof error === "object" && error !== null && "status" in error ? Number(error.status) : 0;
-  return status === 429 || status >= 500;
+  const candidate = error as { status?: number; code?: string; name?: string; cause?: { code?: string } };
+  const status = Number(candidate?.status ?? 0);
+  return status === 429 || (status >= 500 && status <= 599) || candidate?.name === "APIConnectionError" || ["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "EAI_AGAIN"].includes(candidate?.code ?? candidate?.cause?.code ?? "");
 }
 
 function parseContent(content: string | null | undefined): unknown {
@@ -58,7 +59,7 @@ export async function runDecision(prompt: string): Promise<DecisionResult> {
     return result;
   }
 
-  const client = new OpenAI({ apiKey: process.env.LLM_API_KEY, baseURL: process.env.LLM_BASE_URL });
+  const client = new OpenAI({ apiKey: process.env.LLM_API_KEY, baseURL: process.env.LLM_BASE_URL, timeout: timeoutMs, maxRetries: 0 });
   let repairCount = 0;
   let lastError: unknown;
   let usage: LlmUsage | undefined;
@@ -88,6 +89,7 @@ export async function runDecision(prompt: string): Promise<DecisionResult> {
         break;
       }
       if (!isRetryable(error) || attempt === maxAttempts - 1) break;
+      console.error(JSON.stringify({ event: "llm.retry", attempt: attempt + 1, error: error instanceof Error ? error.message : String(error) }));
       await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
     }
   }
