@@ -1,0 +1,133 @@
+# Capabilities Manifest
+
+Generated: 2026-09-18
+Scope: workspace plus the user-level VS Code, Cline, Cursor, and installed-extension capability folders on Windows.
+
+This is a Markdown-formatted `.txt` file. Paths are shown as local Windows paths. Secrets and credentials were not copied into this manifest.
+
+## Inventory Summary
+
+| Category | Installed definitions found |
+|---|---:|
+| MCP servers | 2 configured server definitions |
+| Standalone plugins | 3 packages (Agent Council, Awesome Copilot catalog, ai-ready) |
+| Skills | 12 Cursor skills, 5 Agent Council skills, 1 Java skill, 9 Python environment skills, plus 602 Awesome Copilot catalog skills |
+| Agents | 1 Java debugging agent plus 224 Awesome Copilot catalog agents |
+
+The Awesome Copilot marketplace is a locally installed catalog. Its package contains 100 plugin manifests, 602 skill definitions, and 224 agent definitions. The individual catalog entries remain in the source tree so they can be inspected without duplicating hundreds of long descriptions here.
+
+## MCP Servers
+
+### `sqlite`
+
+- **Source:** `C:\Users\20122\.cline\data\settings\cline_mcp_settings.json`
+- **Transport:** stdio via `npx -y mcp-server-sqlite-npx`
+- **Purpose:** Connects an MCP client to the SQLite database at `D:\courses\Fullstack\next-js-portfolio\test.db`.
+- **Use when:** A task needs to inspect or query that SQLite database, list or describe tables, read data, or create tables.
+- **Enabled:** Yes
+- **Auto-approved operations:** `list_tables`, `describe_table`, `read_query`, `create_table`
+
+### `github`
+
+- **Source:** `C:\Users\20122\.vscode\extensions\ms-vscode.cmake-tools-1.24.42\.mcp.json`
+- **Transport:** HTTP
+- **Endpoint:** `https://api.githubcopilot.com/mcp/`
+- **Purpose:** Provides GitHub/Copilot MCP capabilities exposed by the CMake Tools extension.
+- **Use when:** A task requires the GitHub MCP tools made available by the installed CMake Tools extension.
+- **Enabled:** Defined in the extension manifest; availability also depends on the host and authentication state.
+
+## Plugins
+
+### `agent-council`
+
+- **Source:** `C:\Users\20122\.vscode\agent-plugins\github.com\Avyayalaya\agent-council\ref_v0.1.3\plugin.json`
+- **Description:** Runtime-portable five-agent quality gate for tier-1 text artifacts. It runs Skeptic, Voice & Identity, Evidence & Calibration, Strategy & Stakes, and Adjudicator roles in a two-round async protocol and returns a SHIP, REVISE, or HOLD verdict with a revision brief and audit transcript.
+- **Use when:** A text artifact needs adversarial review, evidence calibration, voice review, strategic review, and a final shipping decision.
+
+### `awesome-copilot` marketplace catalog
+
+- **Source:** `C:\Users\20122\.vscode\agent-plugins\github.com\github\awesome-copilot\ref_marketplace\`
+- **Description:** A broad GitHub Copilot capability marketplace containing reusable plugins, skills, custom agents, instructions, prompts, and development resources.
+- **Use when:** A task matches a specialized workflow in the catalog, such as testing, security, MCP development, documentation, project planning, UI work, GitHub operations, or language/framework development.
+- **Contents:** 100 plugin manifests, 602 skills, and 224 agents.
+- **Important:** Each catalog item has its own metadata. Browse `plugins/*/plugin.json`, `skills/*/SKILL.md`, and `agents/*.agent.md` in the source directory for the complete name and description of every catalog entry.
+
+### `ai-ready`
+
+- **Source:** `C:\Users\20122\.vscode\agent-plugins\github.com\johnpapa\ai-ready\ref_v1.3.0\plugin.json`
+- **Description:** Analyzes a repository and generates AI-ready configuration, including `AGENTS.md`, `copilot-instructions.md`, skills, CI workflows, and issue templates.
+- **Use when:** A repository needs a structured AI collaboration setup or its agent instructions and supporting automation need to be generated.
+
+## Skills
+
+### Agent Council skills
+
+Source: `C:\Users\20122\.vscode\agent-plugins\github.com\Avyayalaya\agent-council\ref_v0.1.3\skills\`
+
+- **`adjudicator-synthesis`** — Synthesizes two or more Agent Council deliberator reviews into a SHIP, REVISE, or HOLD verdict and a concrete revision brief. Use after running multiple council deliberator skills on the same artifact.
+- **`evidence-calibration-review`** — Audits load-bearing claims by evidence tier, identifies confidence mismatches, and flags citation-as-decoration, anecdote piles, and unverifiable single-source patterns. Use before shipping factual or persuasive text.
+- **`skeptic-review`** — Performs an adversarial steelman pass, identifying load-bearing claims, counter-positions, failure modes, and causality-versus-correlation gaps. Use to pressure-test an artifact.
+- **`strategy-stakes-review`** — Checks strategic fit, opportunity cost, kill criteria, and identity coherence against the operator's goals. Use when deciding whether work is worth shipping or continuing.
+- **`voice-identity-review`** — Performs a line-level voice and identity audit for banned patterns, hype, register mismatch, and persona coherence. Use before publishing identity-shaping or executive-facing writing.
+
+### Cursor skills
+
+Source: `C:\Users\20122\.cursor\skills-cursor\`
+
+- **`babysit`** — Monitor and support a long-running coding task. Use when a task needs periodic supervision or recovery.
+- **`canvas`** — Work with Cursor canvas workflows. Use when creating or editing canvas-based artifacts.
+- **`create-hook`** — Create a Cursor hook. Use when adding automated lifecycle behavior to Cursor workflows.
+- **`create-rule`** — Create or update a Cursor rule. Use when encoding repository or user guidance for Cursor.
+- **`create-skill`** — Create a Cursor skill. Use when packaging repeatable expertise or workflow instructions.
+- **`create-subagent`** — Create a Cursor subagent. Use when defining a specialized delegated agent.
+- **`migrate-to-skills`** — Migrate existing instructions or workflows into Cursor skills. Use during customization cleanup or standardization.
+- **`shell`** — Handle Cursor shell workflows. Use when a task needs the skill's shell-oriented procedure.
+- **`split-to-prs`** — Split work into multiple pull requests. Use when changes need independent reviewable PRs.
+- **`statusline`** — Configure or update a Cursor status line. Use when changing status-line behavior.
+- **`update-cli-config`** — Update Cursor CLI configuration. Use when changing command-line settings.
+- **`update-cursor-settings`** — Update Cursor settings. Use when changing user or project Cursor configuration.
+
+### Installed extension skills
+
+- **`java-lsp-tools`** — Java language-server tooling skill bundled with `vscjava.vscode-java-dependency-0.27.6`. Use for Java LSP and dependency-related workflows.
+- **Python environment skills** — 9 skills bundled with `ms-python.vscode-python-envs-1.36.0-win32-x64`, covering Python environment discovery, debugging, snapshots, integration and end-to-end tests, smoke tests, pre-commit checks, settings precedence, and failing-test diagnosis. Use for Python environment and validation workflows.
+
+The complete Python skill names and descriptions are in `C:\Users\20122\.vscode\extensions\ms-python.vscode-python-envs-1.36.0-win32-x64\.github\skills\*/SKILL.md`.
+
+### Awesome Copilot catalog skills
+
+- **Count:** 602
+- **Source:** `C:\Users\20122\.vscode\agent-plugins\github.com\github\awesome-copilot\ref_marketplace\skills\`
+- **Description:** Specialized reusable workflows covering development, testing, security, MCP servers, documentation, planning, operations, UI, and many language/framework ecosystems.
+- **Use when:** The task matches a named workflow in the catalog. Read the matching `SKILL.md` before applying it; its frontmatter contains the authoritative name and description.
+
+## Agents
+
+### Java Debugging Agent
+
+- **Name:** Java Debugging Agent
+- **Source:** `C:\Users\20122\.vscode\extensions\vscjava.vscode-java-debug-0.59.0\bundled\agents\debug.agent.md`
+- **Description:** An expert Java debugging assistant that uses hypothesis-driven debugging to find root causes systematically.
+- **Use when:** Debugging a Java application with breakpoints, targeted runtime inspection, stack traces, variables, expressions, threads, or Java debug sessions.
+- **Operating rules:** State a hypothesis first, set at least one breakpoint before debug operations, inspect only relevant state, test one hypothesis at a time, and clean up according to the launch method.
+
+### Awesome Copilot catalog agents
+
+- **Count:** 224
+- **Source:** `C:\Users\20122\.vscode\agent-plugins\github.com\github\awesome-copilot\ref_marketplace\agents\`
+- **Description:** Specialized custom agents for focused development, architecture, UX, security, DevOps, testing, documentation, product, and platform workflows.
+- **Use when:** A task calls for a named specialist. Read the matching `.agent.md` file before delegating; its frontmatter contains the authoritative agent name, description, and available tools.
+
+## Other Customization Files Found
+
+- `C:\Users\20122\.cline\data\workspaces\chat\AGENTS.md` — Cline shared-chat workspace instructions. It says to ask where a new project should live and keep new work inside a named folder when no project is specified.
+- `C:\Users\20122\.vscode\agent-plugins\github.com\Avyayalaya\agent-council\ref_v0.1.3\AGENTS.md` — Agent Council package instructions.
+- `C:\Users\20122\.vscode\agent-plugins\github.com\github\awesome-copilot\ref_marketplace\AGENTS.md` — Awesome Copilot marketplace repository instructions.
+
+## Discovery Notes
+
+- No workspace-local `.mcp.json`, `mcp.json`, or `cline_mcp_settings.json` was found in the project root.
+- The active user-level Cline MCP configuration contains one enabled server: `sqlite`.
+- The installed CMake Tools extension contributes the `github` MCP manifest.
+- `.claude` exists under the user profile, but no additional capability definition files were identified there during this scan.
+- Extension-internal `plugins` directories that contain Java archives were not counted as agent plugins; only capability metadata and declared agent/skill files were included.
