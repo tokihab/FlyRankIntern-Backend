@@ -12,13 +12,14 @@ export type DecisionNodeData = {
   reason?: string;
   onPromptChange: (id: string, prompt: string) => void;
   onRun: (id: string) => void;
+  onDelete: (id: string) => void;
 };
 
 export type DecisionNode = Node<DecisionNodeData, "decision">;
 export type WorkflowEdge = Edge<{ branch?: "YES" | "NO" }>;
 
 export type PersistedWorkflow = {
-  nodes: Array<Omit<DecisionNode, "data"> & { data: Omit<DecisionNodeData, "onPromptChange" | "onRun"> }>;
+  nodes: Array<Omit<DecisionNode, "data"> & { data: Omit<DecisionNodeData, "onPromptChange" | "onRun" | "onDelete"> }>;
   edges: WorkflowEdge[];
 };
 

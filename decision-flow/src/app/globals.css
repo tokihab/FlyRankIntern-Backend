@@ -147,6 +147,39 @@ body {
   animation: node-enter 420ms ease-out both;
 }
 
+.react-flow__controls {
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 0.12) !important;
+  border-radius: 0.5rem;
+  background: rgb(2 6 23 / 0.9) !important;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 0.25);
+}
+
+.react-flow__controls-button {
+  width: 30px !important;
+  height: 30px !important;
+  border-bottom: 1px solid rgb(255 255 255 / 0.1) !important;
+  background: rgb(15 23 42 / 0.95) !important;
+  fill: rgb(226 232 240) !important;
+  color: rgb(226 232 240) !important;
+}
+
+.react-flow__controls-button:hover {
+  background: rgb(51 65 85) !important;
+  fill: rgb(110 231 183) !important;
+}
+
+.react-flow__edge-textbg {
+  fill: transparent !important;
+}
+
+.react-flow__edge-text {
+  fill: rgb(203 213 225) !important;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 @keyframes node-enter {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }

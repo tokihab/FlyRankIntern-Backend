@@ -1,11 +1,11 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Loader2, Play, RotateCcw, Sparkles } from "lucide-react";
+import { Loader2, Play, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import type { DecisionNode as DecisionNodeType, DecisionStatus } from "@/lib/workflow-types";
+import type { DecisionNodeData, DecisionStatus } from "@/lib/workflow-types";
 
 const statusStyles: Record<DecisionStatus, string> = {
   Idle: "border-slate-500/40 bg-slate-500/10 text-slate-300",
@@ -14,7 +14,9 @@ const statusStyles: Record<DecisionStatus, string> = {
   Error: "border-rose-400/40 bg-rose-400/10 text-rose-200",
 };
 
-export default function DecisionNode({ data, selected }: NodeProps<DecisionNodeType>) {
+export default function DecisionNode(props: NodeProps) {
+  const data = props.data as unknown as DecisionNodeData;
+  const { selected } = props;
   const isBusy = data.status === "Running";
 
   return (
@@ -52,10 +54,13 @@ export default function DecisionNode({ data, selected }: NodeProps<DecisionNodeT
             <span className="text-rose-300">NO</span>
           </div>
         </div>
-        <Button size="sm" className="nodrag w-full bg-emerald-300 text-slate-950 hover:bg-emerald-200" onClick={() => data.onRun(data.id)} disabled={isBusy}>
+        <div className="flex gap-2">
+          <Button size="sm" className="nodrag flex-1 bg-emerald-300 text-slate-950 hover:bg-emerald-200" onClick={() => data.onRun(data.id)} disabled={isBusy}>
           {isBusy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : data.status === "Error" ? <RotateCcw className="mr-2 h-3.5 w-3.5" /> : <Play className="mr-2 h-3.5 w-3.5" />}
           {isBusy ? "Evaluating..." : data.status === "Error" ? "Retry decision" : "Run decision"}
-        </Button>
+          </Button>
+          <Button variant="outline" size="icon" className="nodrag border-rose-400/30 text-rose-300 hover:bg-rose-400/10 hover:text-rose-200" onClick={() => data.onDelete(data.id)} title="Delete decision node" aria-label="Delete decision node"><Trash2 className="h-3.5 w-3.5" /></Button>
+        </div>
       </CardContent>
     </Card>
   );

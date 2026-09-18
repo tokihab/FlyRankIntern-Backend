@@ -11,6 +11,7 @@ import {
   type Connection,
   type EdgeChange,
   type NodeChange,
+  type NodeTypes,
   useEdgesState,
   useNodesState,
 } from "@xyflow/react";
@@ -25,6 +26,7 @@ import {
   Workflow,
   Zap,
   Undo2,
+  Trash2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,7 +35,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import DecisionNode from "@/components/nodes/DecisionNode";
 import type { DecisionNode as DecisionNodeType, DecisionNodeData, ExecutionLog, PersistedWorkflow, WorkflowEdge } from "@/lib/workflow-types";
 
-const nodeTypes = { decision: DecisionNode };
+const nodeTypes: NodeTypes = { decision: DecisionNode };
 const STORAGE_KEY = "flyrank-decision-flow";
 
 type WorkflowCanvasProps = { onLogsChange?: (logs: ExecutionLog[]) => void };
@@ -79,13 +81,6 @@ function makePersisted(nodes: DecisionNodeType[], edges: WorkflowEdge[]): Persis
   };
 }
 
-function evaluate(prompt: string): { decision: "YES" | "NO"; reason: string } {
-  const normalized = prompt.toLowerCase();
-  const negativeSignals = ["not", "no", "exclude", "skip", "spam", "unrelated"];
-  const decision = negativeSignals.some((signal) => normalized.includes(signal)) ? "NO" : "YES";
-  return { decision, reason: decision === "YES" ? "The prompt matches the workflow's positive intent." : "The prompt contains a negative or exclusion signal." };
-}
-
 export default function WorkflowCanvas({ onLogsChange }: WorkflowCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<DecisionNodeType>(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<WorkflowEdge>(initialEdges);
@@ -93,6 +88,7 @@ export default function WorkflowCanvas({ onLogsChange }: WorkflowCanvasProps) {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [logs, setLogs] = useState<ExecutionLog[]>([]);
   const [notice, setNotice] = useState("Ready to run");
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateWithHistory = useCallback((nextNodes: DecisionNodeType[], nextEdges: WorkflowEdge[]) => {
@@ -117,18 +113,46 @@ export default function WorkflowCanvas({ onLogsChange }: WorkflowCanvasProps) {
       return;
     }
     updateNodeData(id, { status: "Running" });
-    setNotice(`Evaluating ${node.data.label}`);
-    window.setTimeout(() => {
-      const result = evaluate(node.data.prompt);
-      updateNodeData(id, { ...result, status: "Success", retries: node.data.retries });
-      const log: ExecutionLog = { id: crypto.randomUUID(), nodeId: id, nodeLabel: node.data.label, status: "Success", ...result, timestamp: new Date().toISOString() };
-      setLogs((current) => [log, ...current]);
-      onLogsChange?.([log, ...logs]);
-      setNotice(`${node.data.label} returned ${result.decision}`);
-    }, 650);
-  }, [logs, nodes, onLogsChange, updateNodeData]);
+    setNotice(`Queued ${node.data.label} in Inngest`);
 
-  const connectedNodes = nodes.map((node) => ({ ...node, data: { ...node.data, onPromptChange: (id: string, prompt: string) => updateNodeData(id, { prompt }), onRun: runNode } }));
+    void (async () => {
+      try {
+        const dispatch = await fetch("/api/workflow/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nodeId: id, prompt: node.data.prompt }) });
+        const dispatchBody = await dispatch.json() as { runId?: string; error?: string };
+        if (!dispatch.ok || !dispatchBody.runId) throw new Error(dispatchBody.error ?? "Could not queue decision");
+
+        for (let attempt = 0; attempt < 60; attempt += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+          const statusResponse = await fetch(`/api/workflow/status/${dispatchBody.runId}`, { cache: "no-store" });
+          const status = await statusResponse.json() as { status: "Running" | "Success" | "Error"; result?: { decision: "YES" | "NO"; reason: string }; error?: string };
+          if (status.status === "Running") continue;
+          if (status.status === "Error" || !status.result) throw new Error(status.error ?? "Background decision failed");
+          updateNodeData(id, { ...status.result, status: "Success", retries: node.data.retries });
+          const log: ExecutionLog = { id: crypto.randomUUID(), nodeId: id, nodeLabel: node.data.label, status: "Success", ...status.result, timestamp: new Date().toISOString() };
+          setLogs((current) => [log, ...current]);
+          onLogsChange?.([log]);
+          setNotice(`${node.data.label} returned ${status.result.decision}`);
+          return;
+        }
+        throw new Error("Timed out waiting for the Inngest run");
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Background decision failed";
+        updateNodeData(id, { status: "Error", reason, retries: node.data.retries + 1 });
+        const log: ExecutionLog = { id: crypto.randomUUID(), nodeId: id, nodeLabel: node.data.label, status: "Error", reason, timestamp: new Date().toISOString() };
+        setLogs((current) => [log, ...current]);
+        onLogsChange?.([log]);
+        setNotice(`${node.data.label} failed`);
+      }
+    })();
+  }, [nodes, onLogsChange, updateNodeData]);
+
+  const deleteNode = useCallback((id: string) => {
+    setNodes((current) => current.filter((node) => node.id !== id));
+    setEdges((current) => current.filter((edge) => edge.source !== id && edge.target !== id));
+    setNotice("Decision node deleted");
+  }, [setEdges, setNodes]);
+
+  const connectedNodes = nodes.map((node) => ({ ...node, data: { ...node.data, onPromptChange: (nodeId: string, prompt: string) => updateNodeData(nodeId, { prompt }), onRun: runNode, onDelete: deleteNode } }));
 
   const onConnect = useCallback((connection: Connection) => {
     const branch = connection.sourceHandle === "no" ? "NO" : "YES";
@@ -191,6 +215,13 @@ export default function WorkflowCanvas({ onLogsChange }: WorkflowCanvasProps) {
     setNodes(next.nodes); setEdges(next.edges); setHistoryIndex((index) => index + 1); setNotice("Redid change");
   };
 
+  const deleteSelectedEdge = () => {
+    if (!selectedEdgeId) return;
+    setEdges((current) => current.filter((edge) => edge.id !== selectedEdgeId));
+    setSelectedEdgeId(null);
+    setNotice("Connection deleted");
+  };
+
   const addNode = () => {
     const id = `decision-${Date.now()}`;
     const newNode: DecisionNodeType = { id, type: "decision", position: { x: 290 + nodes.length * 30, y: 360 }, data: { id, label: `Decision ${nodes.length + 1}`, prompt: "Should this path continue?", status: "Idle", retries: 0 } as DecisionNodeData };
@@ -218,7 +249,7 @@ export default function WorkflowCanvas({ onLogsChange }: WorkflowCanvasProps) {
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(290px,1fr)]">
         <section className="flow-grid relative min-h-[620px] border-b border-white/10 lg:border-b-0 lg:border-r">
-          <ReactFlow nodes={connectedNodes} edges={edges} nodeTypes={nodeTypes} onNodesChange={onNodesChange as (changes: NodeChange<DecisionNodeType>[]) => void} onEdgesChange={onEdgesChange as (changes: EdgeChange<WorkflowEdge>[]) => void} onConnect={onConnect} fitView proOptions={{ hideAttribution: true }}>
+          <ReactFlow nodes={connectedNodes} edges={edges.map((edge) => ({ ...edge, selected: edge.id === selectedEdgeId }))} nodeTypes={nodeTypes} onNodesChange={onNodesChange as (changes: NodeChange<DecisionNodeType>[]) => void} onEdgesChange={onEdgesChange as (changes: EdgeChange<WorkflowEdge>[]) => void} onConnect={onConnect} onEdgeClick={(_event, edge) => setSelectedEdgeId(edge.id)} onPaneClick={() => setSelectedEdgeId(null)} fitView>
             <Background color="#4b6472" gap={28} size={1} />
             <Controls className="!border-white/10 !bg-slate-950/80 !fill-slate-200" />
             <MiniMap className="!border-white/10 !bg-slate-950/80" nodeColor="#6ee7b7" maskColor="rgb(15 23 42 / 0.75)" />
@@ -226,7 +257,7 @@ export default function WorkflowCanvas({ onLogsChange }: WorkflowCanvasProps) {
               <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-950/85 px-3 py-2 text-xs text-slate-400 shadow-xl backdrop-blur"><Zap className="h-3.5 w-3.5 text-amber-300" /><span>{notice}</span></div>
             </Panel>
             <Panel position="top-left" className="!m-5">
-              <Button size="sm" onClick={addNode} className="bg-slate-900/90 text-slate-200 shadow-xl hover:bg-slate-800"><Plus className="mr-1.5 h-3.5 w-3.5" />Add decision</Button>
+              <div className="flex gap-2"><Button size="sm" onClick={addNode} className="bg-slate-900/90 text-slate-200 shadow-xl hover:bg-slate-800"><Plus className="mr-1.5 h-3.5 w-3.5" />Add decision</Button>{selectedEdgeId && <Button size="sm" variant="outline" onClick={deleteSelectedEdge} className="border-rose-400/30 bg-slate-950/90 text-rose-300 hover:bg-rose-400/10"><Trash2 className="mr-1.5 h-3.5 w-3.5" />Delete connection</Button>}</div>
             </Panel>
           </ReactFlow>
         </section>
