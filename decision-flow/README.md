@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Decision Flow
 
-## Getting Started
+An interactive AI decision workflow built with Next.js, React Flow, Inngest, and a Groq/OpenAI-compatible model. Users edit decision nodes on the canvas, queue individual nodes for background execution, and watch the result and execution log return to the UI.
 
-First, run the development server:
+## Architecture
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+The React Flow canvas is the workflow editor and execution surface. Running a node sends `POST /api/workflow/run`, which creates an execution record and publishes a `workflow/execute-node` event to Inngest. The Inngest function runs the LLM decision, updates the execution store, and records either a `YES` or `NO` result. The browser polls `GET /api/workflow/status/:runId` and applies the result to the node and sidebar log in real time.
+
+```text
+React Flow canvas
+       |
+       v
+Next.js /api/workflow/run --> Inngest event queue
+				    |
+				    v
+			    LLM decision function
+				    |
+				    v
+React Flow polling <-- /api/workflow/status/:runId
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## LLM Resilience
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Zod validates every model response against the strict `{ decision: "YES" | "NO", reason }` schema.
+- Invalid JSON or schema output gets exactly one repair request that includes the validation error.
+- Model calls have an explicit 30-second timeout and retry only transient provider failures.
+- The `LLM_ENABLED=false` kill switch returns a deterministic fallback without calling the provider.
+- Structured cost and execution metrics include token counts, duration, and repair count.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Phase 4 Polish
 
-## Learn More
+- Visual node execution states: Idle, Running, Success, and Error.
+- Real-time execution logs in the sidebar.
+- Local storage persistence for the workflow canvas.
+- JSON workflow import and export.
+- Animated branching edges labelled `YES` and `NO`.
 
-To learn more about Next.js, take a look at the following resources:
+## Setup and Run
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+From the repository root:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+cd decision-flow
+npm install
+npm run dev            # Runs Next.js app on port 3002
+npx inngest-cli dev -u http://localhost:3002/api/inngest  # Runs Inngest on port 8288
+```
 
-## Deploy on Vercel
+Open `http://localhost:3002` for the workflow UI and `http://localhost:8288` for the local Inngest dashboard. Configure the provider credentials and runtime flags in `decision-flow/.env`; keep that file untracked.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Evidence
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Inngest Dashboard
+
+The completed background runs and dynamic model results are shown in the Inngest dashboard:
+
+![Completed Inngest runs](public/inngest-runs.png)
+
+### React Flow Canvas
+
+The canvas screenshot shows successful node execution states, branching edges, and the sidebar execution logs:
+
+![Workflow UI](public/workflow-ui.png)
