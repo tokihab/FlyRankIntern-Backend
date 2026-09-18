@@ -1,0 +1,72 @@
+"use client";
+
+import { useState } from "react";
+import { Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+export default function TriagePage() {
+  const [text, setText] = useState("My invoice was charged twice this month.");
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [quarantine, setQuarantine] = useState<unknown[]>([]);
+  const [telemetry, setTelemetry] = useState("No run yet");
+  const [status, setStatus] = useState("Ready");
+
+  const run = async () => {
+    setStatus("Classifying...");
+    const response = await fetch("/api/backend/triage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    setResult(await response.json());
+    setTelemetry(`model=${response.headers.get("x-llm-model") ?? "fallback"} \u00b7 repair_count=${response.headers.get("x-llm-repair-count") ?? "0"}`);
+    setStatus(response.ok ? "Validated response" : `Request returned ${response.status}`);
+    const logResponse = await fetch("/api/backend/api/triage/quarantine", { cache: "no-store" });
+    setQuarantine(await logResponse.json());
+  };
+
+  return (
+    <section className="mx-auto max-w-6xl px-6 py-10">
+      <div className="mb-8">
+        <p className="text-xs uppercase tracking-[0.22em] text-emerald-300">BE-07</p>
+        <h1 className="mt-2 text-4xl font-semibold tracking-tight">AI Support Triage</h1>
+        <p className="mt-3 text-slate-400">Test the validated Groq classifier and inspect quarantined failures without exposing raw model output.</p>
+      </div>
+      
+      <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+          <textarea
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            maxLength={2000}
+            className="min-h-40 w-full resize-y rounded-lg border border-white/10 bg-slate-950 p-3 text-sm leading-6 outline-none focus:border-emerald-300"
+          />
+          <Button
+            onClick={() => void run()}
+            className="mt-4 bg-emerald-300 text-slate-950"
+          >
+            <Send size={16} /> Classify message
+          </Button>
+          <p className="mt-3 text-xs text-slate-500">{status} \u00b7 {telemetry}</p>
+        </div>
+        
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Validated JSON</p>
+          <pre className="mt-4 min-h-40 overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-6 text-emerald-200">
+            {result ? JSON.stringify(result, null, 2) : "Run a message to see the controlled response."}
+          </pre>
+        </div>
+      </div>
+      
+      <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+        <div className="flex items-center justify-between">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Quarantine log</p>
+          <span className="text-xs text-slate-500">{quarantine.length} entries</span>
+        </div>
+        <pre className="mt-4 max-h-56 overflow-auto text-xs leading-6 text-slate-400">
+          {JSON.stringify(quarantine, null, 2)}
+        </pre>
+      </div>
+    </section>
+  );
+}

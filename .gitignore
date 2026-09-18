@@ -1,9 +1,53 @@
+# Dependencies
 node_modules/
+
+# Build outputs
+backend/node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/.pnp/
+frontend/.pnp.js
+
+# Database
+*.db
+data/
+
+# Logs
+logs/
+*.log
+*.jsonl
+
+# Environment files
 .env
 .env.local
-.env.*
+.env.development.local
+.env.test.local
+.env.production.local
 !/.env.example
-tasks.db
-*.db
-*.sqlite
-*.sqlite3
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Scraper output
+scraper/output/
+scraper/cache/
+
+# Docker
+.docker/
+
+# Misc
+*.pem
+
+# Build artifacts
+build/
+dist/
