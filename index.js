@@ -11,13 +11,16 @@ const requireAuth = require('./middleware/auth');
 const { inputSchema, outputSchema } = require('./src/llm/schema');
 const { sleep, getStatusCode, isRetryableStatus, getBackoffMs } = require('./src/llm/retry');
 const { quarantineOutput } = require('./src/llm/quarantine');
+const { run: runScraper } = require('./scraper/src');
 
 const app = express();
 const port = process.env.PORT || 3000;
 const promptVersion = 'triage-v1';
-const llmModel = process.env.LLM_MODEL || 'groq/openai/gpt-oss-120b';
+const llmModel = process.env.LLM_MODEL || 'openai/gpt-oss-120b';
 const llmKillSwitch = process.env.LLM_KILL_SWITCH === '1' || process.env.LLM_KILL_SWITCH === 'true';
 const promptText = fs.readFileSync(path.join(__dirname, 'prompts', 'triage-v1.md'), 'utf8');
+const scraperOutputDir = path.join(__dirname, 'scraper', 'output');
+let scraperRunPromise = null;
 
 app.use(express.json());
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
@@ -153,7 +156,45 @@ app.get('/', (req, res) => {
 
 // Stage 1: Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: "ok" });
+  res.json({
+    status: 'ok',
+    services: {
+      db: Boolean(db),
+      llm: process.env.LLM_ENABLED === 'true' && !llmKillSwitch,
+      auth: isSupabaseConfigured
+    }
+  });
+});
+
+function readScraperOutput(filename, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(scraperOutputDir, filename), 'utf8'));
+  } catch (error) {
+    return fallback;
+  }
+}
+
+app.get('/api/scraper/data', (req, res) => {
+  res.json({
+    books: readScraperOutput('books.json', []),
+    report: readScraperOutput('run-report.json', null)
+  });
+});
+
+app.post('/api/scraper/trigger', async (req, res) => {
+  if (scraperRunPromise) {
+    return res.status(202).json({ status: 'running' });
+  }
+
+  scraperRunPromise = runScraper();
+  try {
+    await scraperRunPromise;
+    return res.status(202).json({ status: 'completed', report: readScraperOutput('run-report.json', null) });
+  } catch (error) {
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Scraper run failed' });
+  } finally {
+    scraperRunPromise = null;
+  }
 });
 
 function classifyStubMessage(text) {
@@ -401,6 +442,8 @@ app.post('/triage', async (req, res) => {
     }
 
     const validatedFinal = outputSchema.parse(finalResult);
+    res.set('X-LLM-Repair-Count', String(repairCount));
+    res.set('X-LLM-Model', llmModel);
 
     logCost({
       promptVersion,
@@ -444,6 +487,8 @@ app.post('/triage', async (req, res) => {
         const repaired = await callModelWithRetry({ messages });
         rawOutput = repaired.content;
         finalResult = await parseAndValidateModelResponse(rawOutput, repairCount);
+        res.set('X-LLM-Repair-Count', String(repairCount));
+        res.set('X-LLM-Model', llmModel);
 
         logCost({
           promptVersion,
@@ -568,4 +613,25 @@ app.delete('/tasks/:id', (req, res) => {
 // Start the server
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
+});
+
+app.get('/api/triage/quarantine', (req, res) => {
+  const quarantinePath = path.join(__dirname, 'logs', 'quarantine.jsonl');
+  if (!fs.existsSync(quarantinePath)) {
+    return res.json([]);
+  }
+
+  const entries = fs.readFileSync(quarantinePath, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .slice(-50)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch (error) {
+        return { error: 'Invalid quarantine log entry' };
+      }
+    });
+
+  return res.json(entries);
 });

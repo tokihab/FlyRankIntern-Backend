@@ -617,6 +617,45 @@ For the containerized stack:
 docker compose up -d --build
 ```
 
+## Unified Internship Platform
+
+The repository now brings the completed internship services together behind one operational platform:
+
+```text
+Browser
+  |
+  +--> Next.js showcase dashboard :3002
+  |       +--> Tasks & Auth
+  |       +--> Polite Scraper
+  |       +--> AI Support Triage
+  |       +--> React Flow Decision Canvas
+  |       +--> Inngest Monitor
+  |
+  +--> Express core API :3000
+          +--> Supabase JWT auth
+          +--> SQLite task CRUD
+          +--> Groq/OpenAI-compatible triage
+          +--> Scraper data and trigger endpoints
+  |
+  +--> Inngest Dev Server :8288 --> Next.js /api/inngest
+```
+
+### Platform map
+
+| Service | Port | Responsibility |
+| --- | ---: | --- |
+| Core API | `3000` | Express, Supabase Auth, SQLite tasks, triage, scraper APIs |
+| Showcase Web App | `3002` | Unified Next.js dashboard and React Flow UI |
+| Inngest Dashboard | `8288` | Background decision runs, retries, and execution history |
+
+### Boot the whole platform
+
+```bash
+docker compose up -d --build
+```
+
+The API persists SQLite data in the `sqlite_data` volume. The frontend talks to the API through its server-side backend proxy, and Inngest dispatches decision events to the Next.js `/api/inngest` handler. Copy `.env.example` to `.env` and provide provider credentials locally; `.env` files remain ignored.
+
 ---
 
 ## Bonus Stage: The AI Rematch

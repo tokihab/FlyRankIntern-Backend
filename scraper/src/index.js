@@ -39,7 +39,11 @@ async function run() {
 	console.log(JSON.stringify(report, null, 2));
 }
 
-run().catch((error) => {
+if (require.main === module) {
+	run().catch((error) => {
 		console.error(error.message);
 		process.exitCode = 1;
-});
+	});
+}
+
+module.exports = { run };
