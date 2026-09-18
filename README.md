@@ -1,5 +1,3 @@
-# FlyRank Task API (Containerized Stack)
-
 A persistent CRUD and authentication API built with **Express.js**, **SQLite**, and **Supabase Auth**, fully containerized using **Docker** and **Docker Compose**. This project demonstrates moving from local development to a reproducible backend with persistent storage and protected routes.
 
 Originally built for the FlyRank AI Internship (Backend Track), this repository now includes Assignment A3 / BE-04 and BE-03 — the evolving task API:
