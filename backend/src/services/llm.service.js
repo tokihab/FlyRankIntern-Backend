@@ -2,13 +2,14 @@ const OpenAI = require('openai');
 const fs = require('fs');
 const path = require('path');
 const env = require('../config/env');
-const { sleep, getStatusCode, isRetryableError, getBackoffMs } = require('../utils/retry');
+const { sleep, getStatusCode, isRetryableError, getBackoffMs, getNetworkErrorCode } = require('../utils/retry');
 const { quarantineOutput } = require('../utils/quarantine');
 const { inputSchema, outputSchema } = require('../validators/triage.validator');
 
 const promptVersion = 'triage-v1';
 const llmModel = env.LLM_MODEL;
 const llmKillSwitch = env.LLM_KILL_SWITCH;
+const llmEnabled = env.LLM_ENABLED;
 const promptText = fs.readFileSync(path.join(__dirname, '..', '..', 'prompts', 'triage-v1.md'), 'utf8');
 
 function classifyStubMessage(text) {
@@ -120,7 +121,7 @@ async function callModelWithRetry({ messages, attempt = 0 }) {
   const client = new OpenAI({
     baseURL: env.LLM_BASE_URL,
     apiKey: env.LLM_API_KEY,
-    timeout: 30000,
+    timeout: 60000, // Increased timeout from 30s to 60s
     maxRetries: 0
   });
 
@@ -144,13 +145,19 @@ async function callModelWithRetry({ messages, attempt = 0 }) {
     };
   } catch (error) {
     const status = getStatusCode(error);
-    const shouldRetry = isRetryableError(error) && attempt < 2;
+    const shouldRetry = isRetryableError(error) && attempt < 3; // Increased from 2 to 3 retries
 
     if (!shouldRetry) {
       throw error;
     }
 
-    console.error(JSON.stringify({ event: 'llm.retry', attempt: attempt + 1, status, network_code: getNetworkErrorCode(error), error: error?.message || String(error) }));
+    console.error(JSON.stringify({ 
+      event: 'llm.retry', 
+      attempt: attempt + 1, 
+      status, 
+      network_code: getNetworkErrorCode(error), 
+      error: error?.message || String(error) 
+    }));
     await sleep(getBackoffMs(attempt));
     return callModelWithRetry({ messages, attempt: attempt + 1 });
   }
@@ -189,7 +196,7 @@ async function triageText(text) {
     throw new Error(`Invalid ${field}: ${issue?.message || 'Request body is invalid'}`);
   }
 
-  if (env.LLM_ENABLED !== true || llmKillSwitch) {
+  if (llmEnabled !== true || llmKillSwitch) {
     const fallback = { category: 'other', urgency: 'low', confidence: 0.0, reason: 'LLM triage is unavailable.' };
     console.log(JSON.stringify({
       prompt_version: promptVersion,
@@ -204,7 +211,7 @@ async function triageText(text) {
     return fallback;
   }
 
-  if (process.env.LLM_STUB === '1') {
+  if (env.LLM_STUB === '1' || process.env.LLM_STUB === '1') {
     const stub = classifyStubMessage(parsedInput.data.text);
     const validated = outputSchema.parse(stub);
     logCost({

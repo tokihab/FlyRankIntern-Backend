@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { inngest } from "@/inngest/client";
-import { createExecution } from "@/lib/execution-store";
+import { startExecution } from "@/lib/execution-store";
 
 export async function POST(request: Request) {
   try {
@@ -10,7 +10,9 @@ export async function POST(request: Request) {
     }
 
     const runId = crypto.randomUUID();
-    createExecution(runId, body.nodeId);
+    startExecution(runId, body.nodeId);
+    
+    // Send to Inngest for background processing
     await inngest.send({
       name: "workflow/execute-node",
       data: { runId, nodeId: body.nodeId, prompt: body.prompt.trim() },

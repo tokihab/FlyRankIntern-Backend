@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const backendUrl = process.env.BACKEND_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+// Use the backend service name for container networking
+const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://api:3000";
 
 async function forward(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;

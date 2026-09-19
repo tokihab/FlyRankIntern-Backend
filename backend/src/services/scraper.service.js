@@ -68,6 +68,23 @@ function extractQuote(html, url) {
     }
   });
   
+  // If no quotes found with .quote selector, try alternative selectors
+  if (quotes.length === 0) {
+    const text = $('body').text().trim();
+    const author = $('small').first().text().trim() || 'Unknown';
+    const tags = [];
+    
+    if (text) {
+      quotes.push({
+        entity: 'quote',
+        text,
+        author,
+        tags,
+        url
+      });
+    }
+  }
+  
   return quotes.length > 0 ? quotes : [{
     entity: 'quote',
     text: $('h1').first().text().trim() || 'No text',
@@ -118,7 +135,7 @@ async function discoverBooks(startUrl) {
   const books = [];
   const seenProducts = new Set();
   let currentUrl = startUrl;
-  const MAX_CATALOGUE_PAGES = 3;
+  const MAX_CATALOGUE_PAGES = 1; // Reduced from 3 to 1 for faster scraping
 
   while (currentUrl && pages.length < MAX_CATALOGUE_PAGES) {
     try {
@@ -148,15 +165,29 @@ async function discoverBooks(startUrl) {
 async function extractBooks(discoveredBooks) {
   const records = [];
   const failedPages = [];
+  const MAX_CONCURRENT = 5; // Limit concurrent requests
+  const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-  for (const book of discoveredBooks) {
-    try {
-      const html = await fetchHtml(book.product_url);
-      const extracted = extractBook(html, book.product_url);
-      records.push(extracted);
-    } catch (error) {
-      failedPages.push({ url: book.product_url, error: error.message });
-      console.error(`FAILED: ${book.product_url} (${error.message})`);
+  for (let i = 0; i < discoveredBooks.length; i += MAX_CONCURRENT) {
+    const batch = discoveredBooks.slice(i, i + MAX_CONCURRENT);
+    const batchPromises = batch.map(async (book) => {
+      try {
+        const html = await fetchHtml(book.product_url);
+        const extracted = extractBook(html, book.product_url);
+        return extracted;
+      } catch (error) {
+        failedPages.push({ url: book.product_url, error: error.message });
+        console.error(`FAILED: ${book.product_url} (${error.message})`);
+        return null;
+      }
+    });
+    
+    const batchResults = await Promise.all(batchPromises);
+    records.push(...batchResults.filter(r => r !== null));
+    
+    // Small delay between batches to be polite
+    if (i + MAX_CONCURRENT < discoveredBooks.length) {
+      await delay(100);
     }
   }
 
@@ -187,13 +218,22 @@ async function normalizeAndStore(rawRecords) {
     validRecords.push(rawRecord);
   }
 
-  // Write results based on content type
+  // Write results based on content type - always write all types for dynamic UI
   if (rawRecords.length > 0 && rawRecords[0].entity === 'book') {
     await writeJson('books.json', validRecords);
+    // Clear old data from other types
+    await writeJson('quotes.json', []);
+    await writeJson('articles.json', []);
   } else if (rawRecords.length > 0 && rawRecords[0].entity === 'quote') {
     await writeJson('quotes.json', validRecords);
+    // Clear old data from other types
+    await writeJson('books.json', []);
+    await writeJson('articles.json', []);
   } else {
     await writeJson('articles.json', validRecords);
+    // Clear old data from other types
+    await writeJson('books.json', []);
+    await writeJson('quotes.json', []);
   }
   
   await writeJson('errors.json', errors);
