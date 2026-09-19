@@ -1,6 +1,6 @@
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
-const swaggerDocument = require('../openapi.json');
+const swaggerDocument = require('./openapi.json');
 const authRoutes = require('./src/routes/auth.routes');
 const taskRoutes = require('./src/routes/task.routes');
 const triageRoutes = require('./src/routes/triage.routes');

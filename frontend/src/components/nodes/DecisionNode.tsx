@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Loader2, Play, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +17,9 @@ const statusStyles: Record<DecisionStatus, string> = {
 
 export default function DecisionNode(props: NodeProps) {
   const data = props.data as unknown as DecisionNodeData;
-  const { selected } = props;
+  const { selected, id } = props;
   const isBusy = data.status === "Running";
+  const nodeId = id || data.id || "";
 
   return (
     <Card className={`flow-node-enter w-[290px] border-white/10 bg-slate-950/90 shadow-2xl shadow-black/25 ${selected ? "ring-2 ring-emerald-300/80" : ""}`}>
@@ -42,7 +44,11 @@ export default function DecisionNode(props: NodeProps) {
         <textarea
           aria-label={`${data.label} prompt`}
           value={data.prompt}
-          onChange={(event) => data.onPromptChange(data.id, event.target.value)}
+          onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => {
+            if (data.onPromptChange && nodeId) {
+              data.onPromptChange(nodeId, event.target.value);
+            }
+          }}
           className="nodrag nowheel min-h-20 w-full resize-none rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-slate-200 outline-none transition placeholder:text-slate-600 focus:border-emerald-300/60 focus:ring-2 focus:ring-emerald-300/10"
           placeholder="Ask a yes or no question..."
         />
@@ -55,11 +61,33 @@ export default function DecisionNode(props: NodeProps) {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" className="nodrag flex-1 bg-emerald-300 text-slate-950 hover:bg-emerald-200" onClick={() => data.onRun(data.id)} disabled={isBusy}>
-          {isBusy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : data.status === "Error" ? <RotateCcw className="mr-2 h-3.5 w-3.5" /> : <Play className="mr-2 h-3.5 w-3.5" />}
-          {isBusy ? "Evaluating..." : data.status === "Error" ? "Retry decision" : "Run decision"}
+          <Button
+            size="sm"
+            className="nodrag flex-1 bg-emerald-300 text-slate-950 hover:bg-emerald-200"
+            onClick={() => {
+              if (data.onRun && nodeId) {
+                data.onRun(nodeId);
+              }
+            }}
+            disabled={isBusy}
+          >
+            {isBusy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : data.status === "Error" ? <RotateCcw className="mr-2 h-3.5 w-3.5" /> : <Play className="mr-2 h-3.5 w-3.5" />}
+            {isBusy ? "Evaluating..." : data.status === "Error" ? "Retry decision" : "Run decision"}
           </Button>
-          <Button variant="outline" size="icon" className="nodrag border-rose-400/30 text-rose-300 hover:bg-rose-400/10 hover:text-rose-200" onClick={() => data.onDelete(data.id)} title="Delete decision node" aria-label="Delete decision node"><Trash2 className="h-3.5 w-3.5" /></Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="nodrag border-rose-400/30 text-rose-300 hover:bg-rose-400/10 hover:text-rose-200"
+            onClick={() => {
+              if (data.onDelete && nodeId) {
+                data.onDelete(nodeId);
+              }
+            }}
+            title="Delete decision node"
+            aria-label="Delete decision node"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
         </div>
       </CardContent>
     </Card>
