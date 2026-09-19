@@ -12,7 +12,7 @@ services:
       SUPABASE_KEY: ${SUPABASE_KEY}
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.groq.com/openai/v1}
       LLM_API_KEY: ${LLM_API_KEY}
-      LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-120b}
+      LLM_MODEL: ${LLM_MODEL:-llama-3.1-8b-instant}
       LLM_ENABLED: ${LLM_ENABLED:-true}
       LLM_KILL_SWITCH: ${LLM_KILL_SWITCH:-false}
       NODE_ENV: ${NODE_ENV:-development}
@@ -28,13 +28,15 @@ services:
     environment:
       PORT: 3002
       BACKEND_URL: http://api:3000
-      NEXT_PUBLIC_API_URL: http://api:3000
+      BACKEND_INTERNAL_URL: http://api:3000
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      INNGEST_BASE_URL: http://inngest:8288
+      INNGEST_DEV: 1
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.groq.com/openai/v1}
       LLM_API_KEY: ${LLM_API_KEY}
-      LLM_MODEL: ${LLM_MODEL:-openai/gpt-oss-120b}
+      LLM_MODEL: ${LLM_MODEL:-llama-3.1-8b-instant}
       LLM_ENABLED: ${LLM_ENABLED:-true}
       LLM_KILL_SWITCH: ${LLM_KILL_SWITCH:-false}
-      INNGEST_DEV: 1
       NODE_ENV: ${NODE_ENV:-development}
     depends_on:
       - api

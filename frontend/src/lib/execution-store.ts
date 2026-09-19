@@ -18,12 +18,12 @@ export function startExecution(runId: string, nodeId: string): Execution {
     status: 'pending',
     timestamp: new Date().toISOString(),
   };
-  executions.set(execution.id, execution);
+  executions.set(runId, execution);
   return execution;
 }
 
 export function completeExecution(runId: string, result: unknown): Execution | undefined {
-  const execution = findExecution(runId);
+  const execution = executions.get(runId);
   if (!execution) return undefined;
 
   execution.status = 'completed';
@@ -32,7 +32,7 @@ export function completeExecution(runId: string, result: unknown): Execution | u
 }
 
 export function failExecution(runId: string, error: unknown): Execution | undefined {
-  const execution = findExecution(runId);
+  const execution = executions.get(runId);
   if (!execution) return undefined;
 
   execution.status = 'failed';
@@ -41,24 +41,11 @@ export function failExecution(runId: string, error: unknown): Execution | undefi
 }
 
 export function findExecution(runId: string): Execution | undefined {
-  for (const execution of executions.values()) {
-    if (execution.runId === runId) {
-      return execution;
-    }
-  }
-  return undefined;
+  return executions.get(runId);
 }
 
-export function getExecution(runId: string, nodeId?: string): Execution | undefined {
-  if (!nodeId) {
-    return findExecution(runId);
-  }
-  for (const execution of executions.values()) {
-    if (execution.runId === runId && execution.nodeId === nodeId) {
-      return execution;
-    }
-  }
-  return undefined;
+export function getExecution(runId: string): Execution | undefined {
+  return executions.get(runId);
 }
 
 export function getAllExecutions(): Execution[] {

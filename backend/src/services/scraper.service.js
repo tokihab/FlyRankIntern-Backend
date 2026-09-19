@@ -197,7 +197,7 @@ async function extractBooks(discoveredBooks) {
 async function normalizeAndStore(rawRecords) {
   const validRecords = [];
   const errors = [];
-  const seenUrls = new Set();
+  const seenKeys = new Set();
 
   for (const rawRecord of rawRecords) {
     // Validate that the record has the expected structure
@@ -209,33 +209,34 @@ async function normalizeAndStore(rawRecords) {
       continue;
     }
 
-    // Check for duplicate URLs
-    if (seenUrls.has(rawRecord.url)) {
+    // Deduplicate books by URL, and quotes by URL + quote text
+    const dedupKey = rawRecord.entity === 'quote'
+      ? `${rawRecord.url}::${rawRecord.text}`
+      : rawRecord.url;
+
+    if (seenKeys.has(dedupKey)) {
       continue;
     }
 
-    seenUrls.add(rawRecord.url);
+    seenKeys.add(dedupKey);
     validRecords.push(rawRecord);
   }
 
   // Write results based on content type - always write all types for dynamic UI
   if (rawRecords.length > 0 && rawRecords[0].entity === 'book') {
     await writeJson('books.json', validRecords);
-    // Clear old data from other types
     await writeJson('quotes.json', []);
     await writeJson('articles.json', []);
   } else if (rawRecords.length > 0 && rawRecords[0].entity === 'quote') {
     await writeJson('quotes.json', validRecords);
-    // Clear old data from other types
     await writeJson('books.json', []);
     await writeJson('articles.json', []);
   } else {
     await writeJson('articles.json', validRecords);
-    // Clear old data from other types
     await writeJson('books.json', []);
     await writeJson('quotes.json', []);
   }
-  
+
   await writeJson('errors.json', errors);
 
   return { validRecords, errors };

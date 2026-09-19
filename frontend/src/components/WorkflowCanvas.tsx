@@ -125,7 +125,7 @@ export default function WorkflowCanvas({ onLogsChange }: WorkflowCanvasProps) {
           await new Promise((resolve) => window.setTimeout(resolve, 500));
           const statusResponse = await fetch(`/api/workflow/status/${dispatchBody.runId}`, { cache: "no-store" });
           const status = await statusResponse.json() as { status: "Running" | "Success" | "Error"; result?: { decision: "YES" | "NO"; reason: string }; error?: string };
-          if (status.status === "Running") continue;
+          if (status.status === "Running" || (status as any).status === "pending") continue;
           if (status.status === "Error" || !status.result) throw new Error(status.error ?? "Background decision failed");
           updateNodeData(id, { ...status.result, status: "Success", retries: node.data.retries });
           const log: ExecutionLog = { id: crypto.randomUUID(), nodeId: id, nodeLabel: node.data.label, status: "Success", ...status.result, timestamp: new Date().toISOString() };
