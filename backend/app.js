@@ -6,6 +6,8 @@ const taskRoutes = require('./src/routes/task.routes');
 const triageRoutes = require('./src/routes/triage.routes');
 const scraperRoutes = require('./src/routes/scraper.routes');
 const healthRoutes = require('./src/routes/health.routes');
+const reportsRoutes = require('./src/routes/reports.routes');
+const internalRoutes = require('./src/routes/internal.routes');
 const errorHandler = require('./src/middlewares/error.middleware');
 
 const app = express();
@@ -29,6 +31,8 @@ app.use('/tasks', taskRoutes);
 app.use('/triage', triageRoutes);
 app.use('/api/scraper', scraperRoutes);
 app.use('/health', healthRoutes);
+app.use('/reports', reportsRoutes);
+app.use('/internal', internalRoutes);
 
 // Legacy endpoints for backward compatibility
 app.use('/api/scraper', scraperRoutes);
