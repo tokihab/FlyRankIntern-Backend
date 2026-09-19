@@ -17,6 +17,42 @@ db.prepare(`
   )
 `).run();
 
+// Create books table for report generation
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS books (
+    id TEXT PRIMARY KEY,
+    title TEXT,
+    price REAL,
+    rating INTEGER,
+    availability TEXT,
+    url TEXT
+  )
+`).run();
+
+// Create quotes table for report generation
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS quotes (
+    id TEXT PRIMARY KEY,
+    text TEXT,
+    author TEXT,
+    tags TEXT,
+    url TEXT
+  )
+`).run();
+
+// Create reports table for tracking generated reports
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS reports (
+    id TEXT PRIMARY KEY,
+    report_type TEXT NOT NULL,
+    filters TEXT,
+    file_path TEXT,
+    status TEXT,
+    valid_records INTEGER,
+    created_at TEXT
+  )
+`).run();
+
 // Seed three example tasks ONLY if the table is empty
 const countCheck = db.prepare('SELECT COUNT(*) as count FROM tasks').get();
 if (countCheck.count === 0) {
