@@ -149,13 +149,121 @@ function getQuotesData(filters = {}) {
   return quotes;
 }
 
+// Get generic data from any table
+function getGenericData(type, filters = {}) {
+  const tableName = type.replace(/s$/, ''); // Remove trailing 's' if present
+  
+  try {
+    let query = `SELECT * FROM ${tableName}`;
+    const conditions = [];
+    const params = [];
+    
+    // Apply generic filters if provided
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        conditions.push(`${key} = ?`);
+        params.push(value);
+      }
+    });
+    
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    
+    const data = db.prepare(query).all(...params);
+    return data;
+  } catch (error) {
+    console.error(`Failed to query table ${tableName}:`, error.message);
+    return [];
+  }
+}
+
+// Sync generic scraped data to any table
+function syncGenericDataToDb(type, data) {
+  const tableName = type.replace(/s$/, ''); // Remove trailing 's'
+  
+  if (!tableName || !Array.isArray(data) || data.length === 0) {
+    console.log(`No data to sync for type: ${type}`);
+    return 0;
+  }
+
+  try {
+    // Create table if it doesn't exist (dynamic table creation)
+    const firstItem = data[0];
+    const columns = Object.keys(firstItem).filter(k => k !== 'entity' && k !== 'url');
+    
+    // Check if table exists
+    const tableCheck = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`).get(tableName);
+    
+    if (!tableCheck) {
+      // Create table dynamically
+      const columnDefs = [
+        'id TEXT PRIMARY KEY',
+        'url TEXT',
+        ...columns.map(col => `${col} ${getColumnType(firstItem[col])}`)
+      ].join(', ');
+      
+      db.prepare(`CREATE TABLE IF NOT EXISTS ${tableName} (${columnDefs})`).run();
+      console.log(`Created table ${tableName} for type ${type}`);
+    }
+
+    // Clear existing data
+    const deleteStmt = db.prepare(`DELETE FROM ${tableName}`);
+    deleteStmt.run();
+
+    // Insert new data
+    const insertColumns = ['id', ...columns.filter(c => c !== 'id')];
+    const placeholders = insertColumns.map(() => '?').join(', ');
+    const insertStmt = db.prepare(`
+      INSERT OR REPLACE INTO ${tableName} (${insertColumns.join(', ')})
+      VALUES (${placeholders})
+    `);
+    
+    let insertedCount = 0;
+    for (const item of data) {
+      if (!item.url) continue;
+      
+      const values = insertColumns.map(col => {
+        if (col === 'id') return item.url;
+        if (Array.isArray(item[col])) {
+          return JSON.stringify(item[col]);
+        }
+        return item[col];
+      });
+      
+      try {
+        insertStmt.run(...values);
+        insertedCount++;
+      } catch (error) {
+        console.error(`Failed to insert ${tableName} item:`, error.message);
+      }
+    }
+
+    console.log(`Synced ${insertedCount} ${tableName} records to database`);
+    return insertedCount;
+  } catch (error) {
+    console.error(`Failed to sync generic data for type ${type}:`, error.message);
+    return 0;
+  }
+}
+
+// Helper to determine SQLite column type
+function getColumnType(value) {
+  if (value === null || value === undefined) return 'TEXT';
+  if (typeof value === 'number') return 'REAL';
+  if (typeof value === 'boolean') return 'INTEGER';
+  return 'TEXT';
+}
+
 module.exports = {
   syncScrapedDataToDb,
+  syncGenericDataToDb,
   getExistingReport,
   createReportRecord,
   updateReportStatus,
   getReportById,
   listReports,
   getBooksData,
-  getQuotesData
+  getQuotesData,
+  getGenericData
 };

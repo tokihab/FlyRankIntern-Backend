@@ -12,7 +12,7 @@ function ensureReportsDir() {
 // Generate HTML template for PDF
 function generateHtmlTemplate(reportData, type) {
   const date = new Date().toISOString();
-  const title = type === 'books' ? 'Books Report' : 'Quotes Report';
+  const title = type === 'books' ? 'Books Report' : type === 'quotes' ? 'Quotes Report' : `${type.charAt(0).toUpperCase() + type.slice(1)} Report`;
   const summary = reportData.summary || {};
   const records = reportData.records || [];
   
@@ -36,7 +36,7 @@ function generateHtmlTemplate(reportData, type) {
         <div class="kpi-value">\u00a3${(summary.average_price || 0).toFixed(2)}</div>
       </div>
     `);
-  } else {
+  } else if (type === 'quotes') {
     kpiCards.push(`
       <div class="kpi-card">
         <div class="kpi-label">Total Quotes</div>
@@ -50,6 +50,27 @@ function generateHtmlTemplate(reportData, type) {
         <div class="kpi-value">${(summary.top_authors || []).length}</div>
       </div>
     `);
+  } else {
+    // Generic KPI cards for any type
+    kpiCards.push(`
+      <div class="kpi-card">
+        <div class="kpi-label">Total Records</div>
+        <div class="kpi-value">${summary.total_count || 0}</div>
+      </div>
+    `);
+    
+    // Add numeric field averages if available
+    Object.keys(summary).forEach(key => {
+      if (key.startsWith('avg_')) {
+        const fieldName = key.replace('avg_', '').replace(/_/g, ' ');
+        kpiCards.push(`
+          <div class="kpi-card">
+            <div class="kpi-label">Avg ${fieldName}</div>
+            <div class="kpi-value">${typeof summary[key] === 'number' ? summary[key].toFixed(2) : summary[key]}</div>
+          </div>
+        `);
+      }
+    });
   }
   
   // Build top 5 table
@@ -97,6 +118,36 @@ function generateHtmlTemplate(reportData, type) {
         </tbody>
       </table>
     `;
+  } else {
+    // Generic top 5 table - try to find top_5_by_* fields
+    const topKey = Object.keys(summary).find(k => k.startsWith('top_5_by_'));
+    if (topKey && summary[topKey] && Array.isArray(summary[topKey])) {
+      const fieldName = topKey.replace('top_5_by_', '').replace(/_/g, ' ');
+      const items = summary[topKey];
+      
+      // Get the first key from the first item to use as column name
+      const displayField = items.length > 0 ? Object.keys(items[0]).find(k => k !== 'id' && k !== 'url' && k !== 'count') || 'value' : 'value';
+      
+      topTable = `
+        <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 16px; color: #333;">Top 5 by ${fieldName}</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="text-align: left;">${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)}</th>
+              <th style="text-align: right;">Count/Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((item, idx) => `
+              <tr>
+                <td style="text-align: left;">${escapeHtml(item[displayField] !== undefined ? String(item[displayField]) : String(item.value) || 'N/A')}</td>
+                <td style="text-align: right;">${item.count !== undefined ? item.count : (item.price !== undefined ? '\u00a3' + item.price.toFixed(2) : '')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
   }
   
   // Build breakdown section
@@ -142,6 +193,33 @@ function generateHtmlTemplate(reportData, type) {
         </tbody>
       </table>
     `;
+  } else {
+    // Generic breakdown - try to find *breakdown fields
+    const breakdownKey = Object.keys(summary).find(k => k.endsWith('_breakdown'));
+    if (breakdownKey && summary[breakdownKey] && Array.isArray(summary[breakdownKey])) {
+      const fieldName = breakdownKey.replace('_breakdown', '').replace(/_/g, ' ');
+      const items = summary[breakdownKey];
+      
+      breakdownSection = `
+        <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 16px; color: #333;">${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)} Breakdown</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="text-align: left;">${fieldName}</th>
+              <th style="text-align: right;">Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(item => `
+              <tr>
+                <td style="text-align: left;">${escapeHtml(Object.keys(item).find(k => k !== 'count') ? item[Object.keys(item).find(k => k !== 'count')] : Object.values(item)[0] || 'Unknown')}</td>
+                <td style="text-align: right;">${item.count || 0}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
   }
   
   // Build main data table

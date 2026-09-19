@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Play, Search, Trash2, Download, FileText, Filter, Loader2, RefreshCw } from "lucide-react";
+import { Play, Search, Trash2, Download, FileText, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 
 type ScrapedEntity = {
@@ -32,15 +31,6 @@ type GeneratedReport = {
   cached?: boolean;
 };
 
-type ReportMetrics = {
-  total_count?: number;
-  average_price?: number;
-  top_expensive?: Array<{ title: string; price: number; rating: number }>;
-  rating_breakdown?: Array<{ rating: string; count: number }>;
-  top_authors?: Array<{ author: string; count: number }>;
-  tag_breakdown?: Array<{ tag: string; count: number }>;
-};
-
 const BOOKS_URL = "http://books.toscrape.com";
 const QUOTES_URL = "http://quotes.toscrape.com";
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
@@ -54,14 +44,9 @@ export default function ScraperPage() {
   const [loading, setLoading] = useState(false);
   
   // Report generation state
-  const [reportType, setReportType] = useState<'books' | 'quotes'>('books');
-  const [minRating, setMinRating] = useState<string>('');
-  const [maxPrice, setMaxPrice] = useState<string>('');
-  const [tagFilter, setTagFilter] = useState<string>('');
   const [forceFresh, setForceFresh] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [generatedReports, setGeneratedReports] = useState<GeneratedReport[]>([]);
-  const [reportMetrics, setReportMetrics] = useState<ReportMetrics | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
 
   const load = async () => {
@@ -101,52 +86,41 @@ export default function ScraperPage() {
     }
   };
 
+  // Determine report type based on current scraper data
+  const getReportType = (): string => {
+    if (records.length === 0) return 'generic';
+    const firstEntity = records[0]?.entity;
+    if (firstEntity === 'book') return 'books';
+    if (firstEntity === 'quote') return 'quotes';
+    return 'generic';
+  };
+
   const generateReport = async () => {
     setGeneratingReport(true);
     setReportError(null);
-    setReportMetrics(null);
     
     try {
-      const filters: Record<string, unknown> = {};
+      const reportType = getReportType();
       
-      if (reportType === 'books') {
-        if (minRating) filters.min_rating = Number(minRating);
-        if (maxPrice) filters.max_price = Number(maxPrice);
-      } else {
-        if (tagFilter) filters.tag = tagFilter;
-      }
-      
+      // For generic/unknown types, use the entity type from records
+      const type = reportType === 'generic' && records.length > 0 
+        ? records[0].entity + 's' 
+        : reportType;
+    
       const response = await fetch(`${BACKEND_URL}/reports`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: reportType, filters, force: forceFresh }),
+        body: JSON.stringify({ 
+          type: getReportType(), 
+          filters: {}, 
+          force: forceFresh 
+        }),
       });
       
       const data = await response.json();
       
       if (response.ok) {
         setReportError(null);
-        
-        // If cached, fetch the metrics from the existing report
-        if (data.cached) {
-          const reportDataResponse = await fetch(`${BACKEND_URL}/reports/${data.id}`);
-          if (reportDataResponse.ok) {
-            const reportData = await reportDataResponse.json();
-            // Extract metrics from the report data
-            const metrics: ReportMetrics = {};
-            if (reportType === 'books') {
-              const booksResponse = await fetch(`${BACKEND_URL}/internal/reports/prepare`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ type: reportType, filters }),
-              });
-              if (booksResponse.ok) {
-                const booksData = await booksResponse.json();
-                setReportMetrics(booksData.reportData.summary);
-              }
-            }
-          }
-        }
         
         // Reload reports list
         await loadReports();
@@ -163,48 +137,6 @@ export default function ScraperPage() {
       setGeneratingReport(false);
     }
   };
-
-  const fetchReportMetrics = async () => {
-    try {
-      const filters: Record<string, unknown> = {};
-      if (reportType === 'books') {
-        if (minRating) filters.min_rating = Number(minRating);
-        if (maxPrice) filters.max_price = Number(maxPrice);
-      } else {
-        if (tagFilter) filters.tag = tagFilter;
-      }
-      
-      const response = await fetch(`${BACKEND_URL}/internal/reports/prepare`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: reportType, filters }),
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        setReportMetrics(data.reportData.summary);
-      }
-    } catch (error) {
-      console.error("Failed to fetch metrics:", error);
-    }
-  };
-
-  // Load reports on mount
-  useEffect(() => {
-    void load();
-    void loadReports();
-  }, []);
-
-  // Update metrics when filters change
-  useEffect(() => {
-    if (records.length > 0) {
-      void fetchReportMetrics();
-    }
-  }, [reportType, minRating, maxPrice, tagFilter, records.length]);
-
-  useEffect(() => {
-    void load();
-  }, []);
 
   const trigger = async () => {
     setLoading(true);
@@ -244,6 +176,12 @@ export default function ScraperPage() {
     }
   };
 
+  // Load reports on mount
+  useEffect(() => {
+    void load();
+    void loadReports();
+  }, []);
+
   const filtered = useMemo(() => 
     records.filter((record) => 
       JSON.stringify(record).toLowerCase().includes(query.toLowerCase())
@@ -274,7 +212,7 @@ export default function ScraperPage() {
       case 'book': return 'Books';
       case 'quote': return 'Quotes';
       case 'article': return 'Articles';
-      default: return entity;
+      default: return entity ? entity.charAt(0).toUpperCase() + entity.slice(1) + 's' : 'Records';
     }
   };
 
@@ -292,6 +230,7 @@ export default function ScraperPage() {
             value={targetUrl}
             onChange={(event) => setTargetUrl(event.target.value)}
             className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-emerald-300"
+            placeholder="Enter any URL to scrape"
           />
           <Button
             variant="outline"
@@ -299,7 +238,7 @@ export default function ScraperPage() {
             onClick={() => setTargetUrl(BOOKS_URL)}
             disabled={loading}
           >
-            Reset to Books
+            Books Example
           </Button>
           <Button
             variant="outline"
@@ -308,7 +247,7 @@ export default function ScraperPage() {
             onClick={() => setTargetUrl(QUOTES_URL)}
             disabled={loading}
           >
-            Quotes Sandbox
+            Quotes Example
           </Button>
           <Button
             onClick={() => void trigger()}
@@ -327,243 +266,6 @@ export default function ScraperPage() {
             <Trash2 size={16} /> Clear
           </Button>
         </div>
-      </div>
-
-      {/* Report Generation Panel */}
-      <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-1">Report Generator</p>
-            <h2 className="text-xl font-semibold text-slate-200">Generate PDF Report</h2>
-          </div>
-          <Badge variant={generatedReports.length > 0 ? "default" : "secondary"}>
-            {generatedReports.length} reports
-          </Badge>
-        </div>
-
-        <div className="grid gap-4 mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="report-type" className="mb-2 text-sm text-slate-400">
-                Dataset Type
-              </Label>
-              <Select
-                value={reportType}
-                onValueChange={(value: 'books' | 'quotes') => setReportType(value)}
-                disabled={generatingReport}
-              >
-                <SelectTrigger className="w-full bg-slate-950 border-white/10 text-slate-200">
-                  <SelectValue placeholder="Select dataset type" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-900 border-white/10">
-                  <SelectItem value="books" className="text-slate-200 focus:bg-slate-800">
-                    Books
-                  </SelectItem>
-                  <SelectItem value="quotes" className="text-slate-200 focus:bg-slate-800">
-                    Quotes
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {reportType === 'books' && (
-              <>
-                <div>
-                  <Label htmlFor="min-rating" className="mb-2 text-sm text-slate-400">
-                    Min Rating
-                  </Label>
-                  <Select
-                    value={minRating}
-                    onValueChange={setMinRating}
-                    disabled={generatingReport}
-                  >
-                    <SelectTrigger className="w-full bg-slate-950 border-white/10 text-slate-200">
-                      <SelectValue placeholder="Any rating" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-white/10">
-                      <SelectItem value="" className="text-slate-200 focus:bg-slate-800">Any rating</SelectItem>
-                      <SelectItem value="5" className="text-slate-200 focus:bg-slate-800">5 Stars</SelectItem>
-                      <SelectItem value="4" className="text-slate-200 focus:bg-slate-800">4 Stars</SelectItem>
-                      <SelectItem value="3" className="text-slate-200 focus:bg-slate-800">3 Stars</SelectItem>
-                      <SelectItem value="2" className="text-slate-200 focus:bg-slate-800">2 Stars</SelectItem>
-                      <SelectItem value="1" className="text-slate-200 focus:bg-slate-800">1 Star</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="max-price" className="mb-2 text-sm text-slate-400">
-                    Max Price (£)
-                  </Label>
-                  <Input
-                    id="max-price"
-                    type="number"
-                    value={maxPrice}
-                    onChange={(e) => setMaxPrice(e.target.value)}
-                    placeholder="Any price"
-                    className="w-full bg-slate-950 border-white/10 text-slate-200"
-                    disabled={generatingReport}
-                  />
-                </div>
-              </>
-            )}
-
-            {reportType === 'quotes' && (
-              <div className="md:col-span-2">
-                <Label htmlFor="tag-filter" className="mb-2 text-sm text-slate-400">
-                  Filter by Tag
-                </Label>
-                <Input
-                  id="tag-filter"
-                  value={tagFilter}
-                  onChange={(e) => setTagFilter(e.target.value)}
-                  placeholder="Enter tag to filter"
-                  className="w-full bg-slate-950 border-white/10 text-slate-200"
-                  disabled={generatingReport}
-                />
-              </div>
-            )}
-
-            <div className="md:col-span-2">
-              <div className="flex items-center space-x-2 mb-2">
-                <Label className="text-sm text-slate-400">
-                  Force Fresh Generation
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="force-fresh"
-                  checked={forceFresh}
-                  onChange={(e) => setForceFresh(e.target.checked)}
-                  className="w-4 h-4 bg-slate-950 border-white/10"
-                  disabled={generatingReport}
-                />
-                <Label htmlFor="force-fresh" className="text-sm text-slate-400">
-                  Generate new report even if cached version exists
-                </Label>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              onClick={() => void generateReport()}
-              disabled={generatingReport || records.length === 0}
-              className="bg-emerald-300 text-slate-950 flex items-center gap-2"
-            >
-              {generatingReport ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <FileText size={16} />
-                  Generate PDF Report
-                </>
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void fetchReportMetrics()}
-              disabled={generatingReport}
-              className="border-white/10 text-slate-200"
-            >
-              <RefreshCw size={16} />
-              Refresh Metrics
-            </Button>
-          </div>
-        </div>
-
-        {/* Quick SQL Metrics Grid */}
-        {reportMetrics && (
-          <div className="mt-6 pt-4 border-t border-white/10">
-            <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-3">
-              SQL Metrics Preview
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-              {reportType === 'books' && (
-                <>
-                  <Card className="bg-white/[0.02] border-white/5">
-                    <CardContent className="pt-4">
-                      <p className="text-xs text-slate-500">Total Books</p>
-                      <p className="text-2xl font-semibold text-slate-200">
-                        {reportMetrics.total_count ?? 0}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-white/[0.02] border-white/5">
-                    <CardContent className="pt-4">
-                      <p className="text-xs text-slate-500">Avg Price</p>
-                      <p className="text-2xl font-semibold text-slate-200">
-                        £{(reportMetrics.average_price ?? 0).toFixed(2)}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-white/[0.02] border-white/5">
-                    <CardContent className="pt-4">
-                      <p className="text-xs text-slate-500">Top Expensive</p>
-                      <p className="text-lg font-semibold text-slate-200">
-                        {(reportMetrics.top_expensive ?? [])[0]?.title ?? 'N/A'}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-white/[0.02] border-white/5">
-                    <CardContent className="pt-4">
-                      <p className="text-xs text-slate-500">Ratings</p>
-                      <p className="text-lg font-semibold text-slate-200">
-                        {(reportMetrics.rating_breakdown ?? []).map(r => `${r.rating}: ${r.count}`).join(', ') || 'N/A'}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </>
-              )}
-              {reportType === 'quotes' && (
-                <>
-                  <Card className="bg-white/[0.02] border-white/5">
-                    <CardContent className="pt-4">
-                      <p className="text-xs text-slate-500">Total Quotes</p>
-                      <p className="text-2xl font-semibold text-slate-200">
-                        {reportMetrics.total_count ?? 0}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-white/[0.02] border-white/5">
-                    <CardContent className="pt-4">
-                      <p className="text-xs text-slate-500">Top Author</p>
-                      <p className="text-lg font-semibold text-slate-200">
-                        {(reportMetrics.top_authors ?? [])[0]?.author ?? 'N/A'}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-white/[0.02] border-white/5">
-                    <CardContent className="pt-4">
-                      <p className="text-xs text-slate-500">Total Authors</p>
-                      <p className="text-lg font-semibold text-slate-200">
-                        {(reportMetrics.top_authors ?? []).length}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-white/[0.02] border-white/5">
-                    <CardContent className="pt-4">
-                      <p className="text-xs text-slate-500">Tags</p>
-                      <p className="text-lg font-semibold text-slate-200">
-                        {(reportMetrics.tag_breakdown ?? []).map(t => `${t.tag}: ${t.count}`).join(', ') || 'N/A'}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Error Display */}
-        {reportError && (
-          <div className="mt-4 p-3 bg-rose-900/20 border border-rose-600 rounded-lg">
-            <p className="text-sm text-rose-400">{reportError}</p>
-          </div>
-        )}
       </div>
 
       <div className="mb-5 flex flex-wrap items-center gap-3">
@@ -588,6 +290,67 @@ export default function ScraperPage() {
             <p className="mt-2 text-2xl font-semibold">{value}</p>
           </div>
         ))}
+      </div>
+
+      {/* Report Generation Panel */}
+      <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500 mb-1">Report Generator</p>
+            <h2 className="text-xl font-semibold text-slate-200">Generate PDF Report</h2>
+          </div>
+          <Badge variant={generatedReports.length > 0 ? "default" : "secondary"}>
+            {generatedReports.length} reports
+          </Badge>
+        </div>
+
+        <div className="grid gap-4 mb-4">
+          <div className="flex items-center space-x-2 mb-2">
+            <Label className="text-sm text-slate-400">
+              Force Fresh Generation
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="force-fresh"
+              checked={forceFresh}
+              onChange={(e) => setForceFresh(e.target.checked)}
+              className="w-4 h-4 bg-slate-950 border-white/10"
+              disabled={generatingReport}
+            />
+            <Label htmlFor="force-fresh" className="text-sm text-slate-400">
+              Generate new report even if cached version exists
+            </Label>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              onClick={() => void generateReport()}
+              disabled={generatingReport || records.length === 0}
+              className="bg-emerald-300 text-slate-950 flex items-center gap-2"
+            >
+              {generatingReport ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <FileText size={16} />
+                  Generate PDF Report from Current Data
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Error Display */}
+        {reportError && (
+          <div className="mt-4 p-3 bg-rose-900/20 border border-rose-600 rounded-lg">
+            <p className="text-sm text-rose-400">{reportError}</p>
+          </div>
+        )}
       </div>
 
       {/* Report History */}

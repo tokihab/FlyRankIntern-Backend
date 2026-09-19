@@ -1,18 +1,22 @@
 const db = require('../config/db');
-const { getBooksData, getQuotesData } = require('./report-db.service');
+const { getBooksData, getQuotesData, getGenericData } = require('./report-db.service');
 
-// Get report data with SQL aggregation for books
+// Get report data with SQL aggregation for any type
 function getReportData(type, filters = {}) {
-  const dataService = type === 'books' ? getBooksData : getQuotesData;
-  const rawData = dataService(filters);
+  // Try to get data based on type
+  let rawData = [];
   
   if (type === 'books') {
+    rawData = getBooksData(filters);
     return generateBooksReport(rawData, filters);
   } else if (type === 'quotes') {
+    rawData = getQuotesData(filters);
     return generateQuotesReport(rawData, filters);
+  } else {
+    // For generic types, get all data from the table
+    rawData = getGenericData(type, filters);
+    return generateGenericReport(rawData, filters, type);
   }
-  
-  return { summary: {}, records: [] };
 }
 
 function generateBooksReport(books, filters) {
@@ -131,13 +135,92 @@ function tryParseTags(tags) {
 
 // Get raw data for PDF table (without pagination)
 function getDataForPdf(type, filters = {}) {
-  const dataService = type === 'books' ? getBooksData : getQuotesData;
-  return dataService(filters);
+  if (type === 'books') {
+    return getBooksData(filters);
+  } else if (type === 'quotes') {
+    return getQuotesData(filters);
+  } else {
+    return getGenericData(type, filters);
+  }
+}
+
+// Generic report generator for any entity type
+function generateGenericReport(records, filters, type) {
+  const count = records.length;
+  
+  // Try to identify key fields dynamically
+  const keyFields = {};
+  if (records.length > 0) {
+    const firstRecord = records[0];
+    Object.keys(firstRecord).forEach(key => {
+      if (key !== 'id' && key !== 'url' && key !== 'entity') {
+        keyFields[key] = typeof firstRecord[key];
+      }
+    });
+  }
+  
+  // Build summary based on available fields
+  const summary: Record<string, unknown> = {
+    total_count: count,
+    filters_applied: filters
+  };
+  
+  // Add numeric field aggregates
+  const numericFields = Object.entries(keyFields)
+    .filter(([_, type]) => type === 'number')
+    .map(([field]) => field);
+  
+  if (numericFields.length > 0) {
+    numericFields.forEach(field => {
+      const values = records.map(r => r[field]).filter(v => v !== null && v !== undefined);
+      if (values.length > 0) {
+        const sum = values.reduce((a, b) => a + b, 0);
+        const avg = sum / values.length;
+        summary[`avg_${field}`] = Number(avg.toFixed(2));
+        
+        // Get top 5 by this field
+        const sorted = [...records]
+          .filter(r => r[field] !== null && r[field] !== undefined)
+          .sort((a, b) => b[field] - a[field])
+          .slice(0, 5);
+        summary[`top_5_by_${field}`] = sorted;
+      }
+    });
+  }
+  
+  // Add string field counts
+  const stringFields = Object.entries(keyFields)
+    .filter(([_, type]) => type === 'string')
+    .map(([field]) => field);
+  
+  stringFields.forEach(field => {
+    const counts = {};
+    records.forEach(r => {
+      const value = r[field] || 'Unknown';
+      counts[value] = (counts[value] || 0) + 1;
+    });
+    const sorted = Object.entries(counts)
+      .sort(([_, a], [__, b]) => b - a)
+      .slice(0, 5);
+    summary[`${field}_breakdown`] = sorted.map(([value, count]) => ({ [field]: value, count }));
+  });
+  
+  return {
+    summary,
+    records: records.map(r => {
+      const result: Record<string, unknown> = { id: r.url || r.id };
+      Object.keys(r).filter(k => !['entity', 'url'].includes(k)).forEach(key => {
+        result[key] = r[key];
+      });
+      return result;
+    })
+  };
 }
 
 module.exports = {
   getReportData,
   getDataForPdf,
   generateBooksReport,
-  generateQuotesReport
+  generateQuotesReport,
+  generateGenericReport
 };
