@@ -49,8 +49,16 @@ export function findExecution(runId: string): Execution | undefined {
   return undefined;
 }
 
-export function getExecution(runId: string, nodeId: string): Execution | undefined {
-  return executions.get(`${runId}-${nodeId}`);
+export function getExecution(runId: string, nodeId?: string): Execution | undefined {
+  if (!nodeId) {
+    return findExecution(runId);
+  }
+  for (const execution of executions.values()) {
+    if (execution.runId === runId && execution.nodeId === nodeId) {
+      return execution;
+    }
+  }
+  return undefined;
 }
 
 export function getAllExecutions(): Execution[] {
