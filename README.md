@@ -3,7 +3,7 @@
 
 A full-stack application integrating an Express.js backend, SQLite persistence, Supabase authentication, LLM-driven triage, a polite web scraper with automated Playwright PDF reporting, and an interactive Next.js React Flow decision canvas orchestrated by Inngest.
 
----
+```
 
 ## Architecture Overview
 
