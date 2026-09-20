@@ -1,6 +1,7 @@
+```markdown
 # FlyRank Unified Platform: Core Task API & AI Decision Flow
 
-A full-stack platform integrating an Express.js REST API with SQLite persistence, Supabase authentication, LLM-driven triage, a polite web scraper with automated Playwright PDF reporting, and an interactive Next.js React Flow decision canvas orchestrated by Inngest.
+A full-stack platform integrating an Express.js REST API with SQLite persistence, Supabase authentication, LLM-driven triage, a polite web scraper with automated Playwright PDF reporting, an asynchronous background job engine powered by Inngest, and an interactive Next.js React Flow decision canvas.
 
 ---
 
@@ -10,13 +11,18 @@ A full-stack platform integrating an Express.js REST API with SQLite persistence
 2. [Core Features](#core-features)
 3. [Quick Start](#quick-start)
 4. [Environment Variables](#environment-variables)
-5. [API Endpoints Reference](#api-endpoints-reference)
+5. [API Endpoints Reference](#api-endpoints-reference)s
 6. [AI Decision Flow](#ai-decision-flow)
-7. [Verification & Testing Guide](#verification--testing-guide)
-8. [Docker Commands Reference](#docker-commands-reference)
-9. [Project Structure](#project-structure)
-10. [Troubleshooting](#troubleshooting)
-11. [Technology Stack](#technology-stack)
+7. [Background Job Engine (Assignment A7)](#background-job-engine-assignment-a7)
+8. [Verification & Testing Guide](#verification--testing-guide)
+9. [Docker Commands Reference](#docker-commands-reference)
+10. [Project Structure](#project-structure)
+11. [Troubleshooting](#troubleshooting)
+12. [Technology Stack](#technology-stack)
+13. [Stages & Assignments Completed](#stages--assignments-completed)
+14. [Example Requests & Responses](#example-requests--responses)
+15. [Contributing & License](#contributing)
+16. [Author](#author)
 
 ---
 
@@ -32,6 +38,7 @@ Browser / Client
   │      ├── Polite Scraper & Data Viewer
   │      ├── AI Support Triage Console
   │      ├── React Flow Decision Canvas
+  │      ├── Inngest Monitor & Job Trigger Card
   │      └── Inngest Event Stream ────┐
   │                                   │
   ├──► Express Core API (:3000)       │
@@ -39,10 +46,13 @@ Browser / Client
   │      ├── SQLite Persistent CRUD   │
   │      ├── LLM Support Triage       │
   │      ├── Scraper Trigger Engine   │
-  │      └── Playwright PDF Generator │
+  │      ├── Playwright PDF Engine    │
+  │      ├── Inngest Background Queue │
+  │      └── In-Memory Job Store ─────┤
   │                                   ▼
   └──► Inngest Dev Server (:8288) ◄───┘
-         └── Executes background node evaluation & workflows
+         └── Coordinates background workflows, retries & cron
+
 ```
 
 ### Containerized Infrastructure
@@ -70,18 +80,19 @@ Host Machine
 │  ┌────────────────────────┐                                   │
 │  │ inngest (:8288)        │                                   │
 │  │ - Local Event Queue    │                                   │
-│  │ - Workflow Engine      │                                   │
+│  │ - Multi-App Engine     │                                   │
 │  └────────────────────────┘                                   │
 └───────────────────────────────────────────────────────────────┘
+
 ```
 
 ### Service Map
 
 | Service | Host Port | Container Port | Responsibility |
-|---------|-----------|-----------------|-----------------|
-| **Core API** | `3000` | `3000` | Task CRUD, Supabase auth verification, AI triage, scraping, and PDF reporting |
-| **Showcase Web App** | `3002` | `3002` | Next.js dashboard, visual workflow canvas, scraper monitor, and report viewer |
-| **Inngest Server** | `8288` | `8288` | Background execution queue, step orchestration, and retry management |
+| --- | --- | --- | --- |
+| **Core API** | `3000` | `3000` | Task CRUD, Supabase auth verification, AI triage, scraping, PDF reporting, and background worker routes |
+| **Showcase Web App** | `3002` | `3002` | Next.js dashboard, visual workflow canvas, scraper monitor, report viewer, and background job orchestrator |
+| **Inngest Server** | `8288` | `8288` | Background execution queue, multi-app registration, step orchestration, retry backoff, and cron schedules |
 
 ---
 
@@ -89,18 +100,18 @@ Host Machine
 
 ### 1. Persistent Task API & Authentication
 
-* **Single-Command Multi-Container Stack**: Docker Compose builds and orchestrates the API, Next.js web application, and Inngest background engine simultaneously.
-* **Persistent SQLite Storage**: SQLite database files persist across container restarts, stops, and rebuilds via named Docker volumes.
-* **Supabase Authentication**: Secure token verification using bearer tokens delegated to Supabase Auth with password encryption and session management.
+* **Single-Command Multi-Container Stack**: Docker Compose orchestrates the Express backend, Next.js frontend, and Inngest engine simultaneously.
+* **Persistent SQLite Storage**: Data survives restarts and rebuilds via named Docker volumes mounted to `/app/data`.
+* **Supabase Authentication**: Secure token verification using bearer tokens delegated to Supabase Auth.
 * **Parameterized SQL Queries**: All queries execute through prepared statements in `better-sqlite3` to prevent SQL injection vulnerabilities.
 * **Interactive API Documentation**: Built-in Swagger UI explorer available directly at `/docs`.
 
 ### 2. AI Support Triage (Assignment A17)
 
 * **Prompt Engineering**: Versioned system prompt (`prompts/triage-v1.md`) categorizing tickets into `billing`, `bug`, `feature`, and `other`.
-* **Validation & Self-Repair**: Strict Zod schema enforcement with an automated repair prompt loop on malformed outputs.
+* **Validation & Self-Repair**: Strict Zod schema enforcement with an automated repair prompt loop on malformed model output.
 * **Quarantine Pipeline**: Unrecoverable responses are quarantined under `logs/quarantine.jsonl` with request and error context.
-* **Operational Guardrails**: Configurable kill switch (`LLM_KILL_SWITCH=1`), deterministic stubs, and strict request timeouts (30 seconds).
+* **Operational Guardrails**: Configurable kill switch (`LLM_KILL_SWITCH=1`), deterministic stubs, and strict 30-second request timeouts.
 * **Eval Performance**: 8/8 correct classifications on the official eval set using `openai/gpt-oss-120b`.
 
 ### 3. Polite Scraper & PDF Reporting
@@ -117,53 +128,58 @@ Host Machine
 * **Workflow Portability**: Full canvas import and export via JSON alongside browser local storage persistence.
 * **LLM Resilience**: Zod schema validation with one-shot repair on malformed output, explicit 30-second timeout, and deterministic fallback via `LLM_KILL_SWITCH`.
 
+### 5. Background Job Engine (Assignment A7)
+
+* **202 Accepted Asynchronous Pattern**: Long-running requests return immediately with an ID and pending status, offloading work to background workers.
+* **Durable Step Execution**: Multi-step workflows (`prepare-order`, `do-the-slow-work`, `build-report`) that survive server restarts mid-run.
+* **Exponential Backoff Retries**: Transient failures automatically retry with increasing delays before exhausting.
+* **Automated Cron Scheduling**: Scheduled heartbeat tasks executing on the clock without incoming HTTP requests.
+* **Idempotency & Concurrency**: Safeguards against redundant executions and protects downstream services with concurrency caps.
+
 ---
 
 ## Quick Start
 
 ### Prerequisites
 
-* **Docker Desktop** (v20.10+) – [Download here](https://www.docker.com/products/docker-desktop)
-* **Git** – [Download here](https://git-scm.com/)
-* **curl** or **Postman** – For testing endpoints (optional; Swagger UI is built-in)
+* **Docker Desktop** (v20.10+)
+* **Git**
+* **curl** or **PowerShell**
 
 ### 1. Clone and Configure
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/flyrank-task-api.git
-cd flyrank-task-api
+git clone [https://github.com/tokihab/FlyRankIntern-Backend.git](https://github.com/tokihab/FlyRankIntern-Backend.git)
+cd FlyRankIntern-Backend
 cp .env.example .env
+
 ```
 
 ### 2. Start the Full Stack
 
 ```bash
 docker compose up -d --build
-```
 
-**What happens:**
-- Docker builds the Node.js application image
-- Frontend, API, and Inngest containers start
-- Named volume `sqlite_data` is created or mounted
-- SQLite database is initialized at `/app/data/tasks.db`
-- Three example tasks are seeded (only on first run)
-- Services listen on their designated ports
+```
 
 ### 3. Verify Running Containers
 
 ```bash
 docker compose ps
+
 ```
 
 All three services should report status `Up`:
-- `flyrank-task-api-api-1`
-- `flyrank-task-api-frontend-1`
-- `flyrank-task-api-inngest-1`
 
-### 4. Check System Status
+* `flyrank-task-api-api-1`
+* `flyrank-task-api-frontend-1`
+* `flyrank-task-api-inngest-1`
+
+### 4. Check System Health
 
 ```bash
 curl http://localhost:3000/health
+
 ```
 
 Expected output:
@@ -177,13 +193,15 @@ Expected output:
     "auth": true
   }
 }
+
 ```
 
 ### 5. Access the Platform
 
-- **Dashboard & Canvas**: `http://localhost:3002`
-- **API Documentation**: `http://localhost:3000/docs`
-- **Inngest Monitor**: `http://localhost:8288`
+* **Dashboard & Canvas**: `http://localhost:3002`
+* **Inngest Monitor**: `http://localhost:3002/inngest-monitor`
+* **API Documentation**: `http://localhost:3000/docs`
+* **Inngest Dev Server**: `http://localhost:8288`
 
 ---
 
@@ -193,12 +211,15 @@ Copy the template file to configure your local runtime:
 
 ```bash
 cp .env.example .env
+
 ```
 
 | Variable | Description | Default | Example |
-|----------|-------------|---------|---------|
+| --- | --- | --- | --- |
 | `PORT` | API port inside the container | `3000` | `3000` |
 | `DB_PATH` | Path to persistent SQLite database | `/app/data/tasks.db` | `/app/data/tasks.db` |
+| `INNGEST_DEV` | Forces Inngest SDK to local dev mode | `1` | `1` |
+| `INNGEST_BASE_URL` | Inngest Dev Server container URL | `http://inngest:8288` | `http://inngest:8288` |
 | `SUPABASE_URL` | Supabase Project URL | — | `https://xyz.supabase.co` |
 | `SUPABASE_KEY` | Supabase anon public API key | — | `eyJhbGci...` |
 | `LLM_BASE_URL` | OpenAI-compatible endpoint | `https://api.groq.com/openai/v1` | `https://api.groq.com/openai/v1` |
@@ -208,8 +229,6 @@ cp .env.example .env
 | `LLM_STUB` | Returns local mock classifications | `0` | `1` |
 | `LLM_KILL_SWITCH` | Completely halts outgoing LLM calls | `0` | `1` |
 
-**Security Note:** The `.env` file contains sensitive configuration and is never committed to Git. Only `.env.example` is tracked so team members know which keys to set.
-
 ---
 
 ## API Endpoints Reference
@@ -217,7 +236,7 @@ cp .env.example .env
 ### Authentication & Public Routes
 
 | Method | Endpoint | Auth | Description | Status Codes |
-|--------|----------|------|-------------|--------------|
+| --- | --- | --- | --- | --- |
 | `POST` | `/auth/signup` | None | Register a new user account | `201`, `400` |
 | `POST` | `/auth/login` | None | Authenticate credentials and get access token | `200`, `400`, `401` |
 | `POST` | `/auth/logout` | Bearer Token | Invalidate current session | `204`, `401` |
@@ -230,7 +249,7 @@ cp .env.example .env
 ### Task Operations
 
 | Method | Endpoint | Description | Request Body | Status Codes |
-|--------|----------|-------------|--------------|--------------|
+| --- | --- | --- | --- | --- |
 | `GET` | `/tasks` | List all tasks | — | `200` |
 | `GET` | `/tasks/:id` | Get task by ID | — | `200`, `404` |
 | `POST` | `/tasks` | Create a new task | `{"title": "Deploy API"}` | `201`, `400` |
@@ -240,38 +259,27 @@ cp .env.example .env
 ### AI Support Triage
 
 | Method | Endpoint | Description | Request Body |
-|--------|----------|-------------|--------------|
+| --- | --- | --- | --- |
 | `POST` | `/triage` | Classify inbound support ticket | `{"text": "My invoice was charged twice this month and I need a refund."}` |
 
-**Example Response:**
-
-```json
-{
-  "category": "billing",
-  "urgency": "high",
-  "confidence": 0.96,
-  "reason": "This is a billing dispute about a duplicate charge."
-}
-```
-
-### Polite Scraper & PDF Reports
+### Background Jobs & Reports (Polymorphic Handler)
 
 | Method | Endpoint | Description | Request Body | Status Codes |
-|--------|----------|-------------|--------------|--------------|
-| `POST` | `/scraper` | Trigger scraper and sync to SQLite | `{"url": "http://books.toscrape.com"}` | `200`, `400` |
-| `GET` | `/scraper/data` | Retrieve latest scraped JSON output | — | `200` |
-| `GET` | `/reports` | List all historical reports | — | `200` |
-| `POST` | `/reports` | Request PDF report generation | `{"type": "books", "force": false}` | `200`, `201`, `400` |
-| `GET` | `/reports/:id` | Retrieve report metadata | — | `200`, `404` |
-| `GET` | `/reports/:id/file` | Stream rendered PDF file | — | `200`, `404` |
+| --- | --- | --- | --- | --- |
+| `POST` | `/reports` | Trigger asynchronous background report job | `{"topic": "cats"}` | `202`, `400` |
+| `POST` | `/reports` | Request synchronous PDF report generation | `{"type": "books", "force": false}` | `200`, `201`, `400` |
+| `GET` | `/reports` | List combined job and PDF reports | — | `200` |
+| `GET` | `/reports/:id` | Poll background job or fetch PDF report metadata | — | `200`, `404` |
+| `DELETE` | `/reports/:id` | Delete an in-memory job or SQLite report record | — | `200`, `404` |
+| `GET` | `/reports/:id/file` | Download rendered PDF artifact | — | `200`, `404` |
 
-### Workflow & Inngest
+### Workflow & Inngest Routes
 
-| Method | Endpoint | Description | Request Body |
-|--------|----------|-------------|--------------|
-| `POST` | `/api/workflow/run` | Queue a decision node for execution | `{"nodeId": "node-1", "nodeData": {...}}` |
-| `GET` | `/api/workflow/status/:runId` | Poll execution result | — |
-| `POST` | `/api/inngest` | Inngest event handler webhook | Inngest payload |
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `POST` | `/api/workflow/run` | Queue a decision node for execution on the React Flow canvas |
+| `GET` | `/api/workflow/status/:runId` | Poll workflow execution status |
+| `ALL` | `/api/inngest` | Inngest function registration and execution handler (both API and Frontend) |
 
 ---
 
@@ -279,7 +287,7 @@ cp .env.example .env
 
 ### Architecture
 
-The React Flow canvas is the workflow editor and execution surface. Running a node sends `POST /api/workflow/run`, which creates an execution record and publishes a `workflow/execute-node` event to Inngest. The Inngest function runs the LLM decision, updates the execution store, and records either a `YES` or `NO` result. The browser polls `GET /api/workflow/status/:runId` and applies the result to the node and sidebar log in real time.
+The React Flow canvas is the workflow editor and execution surface. Running a node sends `POST /api/workflow/run`, which creates an execution record and publishes a `workflow/execute-node` event to Inngest. The Inngest function executes the LLM decision, updates the execution store, and records a `YES` or `NO` outcome. The browser polls `GET /api/workflow/status/:runId` and applies the result to the canvas and sidebar logs in real time.
 
 ```text
 React Flow canvas
@@ -292,54 +300,168 @@ Next.js /api/workflow/run --> Inngest event queue
             |
             v
 React Flow polling <-- /api/workflow/status/:runId
+
 ```
 
-### LLM Resilience & Validation
-
-- **Zod Schema Enforcement**: Every model response is validated against `{ decision: "YES" | "NO", reason }`.
-- **One-Shot Repair**: Invalid JSON or schema mismatches trigger exactly one repair request including the validation error message.
-- **Strict Timeouts**: Model calls have an explicit 30-second timeout with retry only for transient provider failures (429, 5xx).
-- **Kill Switch**: The `LLM_ENABLED=false` kill switch returns a deterministic fallback without calling any provider.
-- **Cost & Metrics**: Structured logging includes token counts, duration, repair count, and execution traces.
-
-### Visual Features
-
-- **Node Execution States**: Idle, Running, Success, and Error with color-coded visual indicators.
-- **Real-Time Logs**: Sidebar displays live execution log with node ID, status, LLM decision, and reasoning.
-- **Branching Edges**: Animated edges labeled `YES` and `NO` connect nodes based on decision outcomes.
-- **Workflow Persistence**: Full canvas import/export via JSON and browser local storage.
-- **Inngest Dashboard**: View completed runs, retry history, and dynamic model results at `http://localhost:8288`.
-
-### Setup & Evidence
-
-From the repository root:
-
-```bash
-cd frontend
-npm install
-npm run dev            # Runs Next.js on port 3002
-
-# In a separate terminal
-npx inngest-cli dev -u http://localhost:3002/api/inngest  # Runs Inngest on port 8288
-```
-
-Configure provider credentials and runtime flags in `frontend/.env` (keep untracked).
+### Visual Evidence
 
 #### Inngest Dashboard
 
-The completed background runs and dynamic model results are shown in the Inngest dashboard:
-
-![Completed Inngest runs](/dashboard.png)
+Completed background runs and dynamic model results in the Inngest dashboard:
 
 *Inngest dashboard showing executed decision workflows, run history, and background job metrics.*
 
 #### React Flow Canvas
 
-The canvas screenshot shows successful node execution states, branching edges, and the sidebar execution logs:
-
-![Workflow UI](/flow.png)
+The canvas showing successful node execution states, branching edges, and sidebar execution logs:
 
 *Interactive React Flow canvas with real-time execution status, decision logs, and branching logic visualization.*
+
+---
+
+## Background Job Engine (Assignment A7)
+
+An asynchronous background job processing engine built with Express.js and Inngest. Long-running operational tasks (such as report generation or AI batch jobs) are decoupled from HTTP request lifecycles using the **202 Accepted** pattern, non-blocking polling, exponential backoff retries, and automated cron heartbeats.
+
+```text
+HTTP Client / Frontend UI
+       │
+       ├──► POST /reports {"topic":"cats"}
+       │      │
+       │      ├─► Store initial record in-memory (status: "pending")
+       │      ├─► Dispatch "report/requested" event to Inngest
+       │      └─► Return HTTP 202 Accepted instantly (<150ms)
+       │
+       ├──► Background Worker (Inngest)
+       │      │
+       │      ├─► Step 1: Idempotency check & order preparation
+       │      ├─► Step 2: Durable sleep (8s simulation)
+       │      └─► Step 3: Compute report & transition state to "done"
+       │
+       └──► GET /reports/:id (Polling) ──► Returns "pending" -> "done"
+
+```
+
+### Inngest Functions & Endpoints
+
+#### Background Functions (`backend/src/inngest/functions.js`)
+
+| Function ID | Trigger Type | Event / Schedule | Configuration & Steps |
+| --- | --- | --- | --- |
+| `say-hello` | Event | `test/hello` | 5-second durable sleep (`wait-a-bit`), returns confirmation message |
+| `make-report` | Event | `report/requested` | 3-step pipeline (`prepare-order`, `do-the-slow-work` [8s sleep], `build-report`), `retries: 2`, `concurrency: 2`, native `onFailure` hook |
+| `heartbeat` | Cron | `* * * * *` | Runs every minute on the clock; aggregates and logs in-memory pending, done, and failed metrics |
+
+#### API Endpoints (`backend/src/routes/reports.routes.js`)
+
+| Method | Endpoint | Status Code | Description |
+| --- | --- | --- | --- |
+| `POST` | `/reports` | `202 Accepted` | Validates `topic`, creates an in-memory job record, dispatches `report/requested`, and returns `{ id, status: "pending" }` |
+| `POST` | `/reports` | `400 Bad Request` | Rejects missing or blank `topic` payloads before emitting any queue events |
+| `GET` | `/reports/:id` | `200 OK` | Returns report status (`pending`, `done`, or `failed`), result payload, and timestamps |
+| `GET` | `/reports/:id` | `404 Not Found` | Returned when the requested ID does not exist in the in-memory store or SQLite database |
+
+### Core Concepts & Rubric Reflections
+
+* **Stage 3 (Validation vs. Retries):** Bad input (such as an empty topic) is a deterministic client error that will fail identically on every execution attempt; it must be rejected immediately at the door with `400 Bad Request` without consuming queue or worker resources. Retries are reserved strictly for transient runtime errors (network timeouts, temporary downstream provider outages, or rate limits) where exponential backoff gives dependencies time to recover.
+* **Stage 4 (Cron Expressions):**
+* Every day at 08:00 UTC: `0 8 * * *`
+* Every Sunday at 22:00 UTC: `0 22 * * 0` (or `0 22 * * SUN`)
+
+
+* **Idempotency (Stretch Goal):** Background jobs must survive running multiple times because distributed message brokers and event queues guarantee at-least-once delivery. Network dropouts can cause acknowledgment timeouts even after a worker has successfully finished. Checking existing status before execution ensures side effects occur only once.
+* **Concurrency Limits (Stretch Goal):** A concurrency ceiling (configured to `limit: 2`) protects downstream infrastructure (database connection pools, rate-limited LLM APIs, and rendering engines) from saturation when traffic surges spike inbound event volume.
+* **Durability Experiment (Stretch Goal):** When stopping the API container during the 8-second sleep step and restarting it, Inngest resumes execution directly at the sleep step upon reconnection without re-running completed preparation steps, demonstrating durable step execution.
+
+### Live Verification Proofs
+
+#### 1. Instant 202 Accepted & Eventual Consistency Polling
+
+```http
+POST /reports {"topic":"cats"} -> 202 Accepted (115 ms)
+Response:
+{
+  "id": "0e586bd7-7917-4ba9-a90f-84cd8bde2b36",
+  "status": "pending"
+}
+
+GET /reports/0e586bd7-7917-4ba9-a90f-84cd8bde2b36 -> 200 OK (Immediate Poll)
+Response:
+{
+  "id": "0e586bd7-7917-4ba9-a90f-84cd8bde2b36",
+  "topic": "cats",
+  "status": "pending",
+  "result": null
+}
+
+GET /reports/0e586bd7-7917-4ba9-a90f-84cd8bde2b36 -> 200 OK (Polled After 8.3s)
+Response:
+{
+  "id": "0e586bd7-7917-4ba9-a90f-84cd8bde2b36",
+  "topic": "cats",
+  "status": "done",
+  "result": "Comprehensive executive report on [cats]: All 8 metrics analyzed and verified.",
+  "error": null,
+  "created_at": "2026-09-20T11:36:44.477Z",
+  "updated_at": "2026-09-20T11:36:52.776Z"
+}
+
+```
+
+#### 2. Deterministic Input Validation (400 Bad Request)
+
+```http
+POST /reports {} -> 400 Bad Request
+Response:
+{
+  "error": "Valid non-empty topic is required"
+}
+
+```
+
+#### 3. Automatic Retries & Exponential Backoff (Topic: "fail")
+
+```http
+POST /reports {"topic":"fail"} -> 202 Accepted
+Triggered Job ID: d5aa6ae4-26b8-4a90-800d-e226b1344fd9
+
+GET /reports/d5aa6ae4-26b8-4a90-800d-e226b1344fd9 -> 200 OK (After 3 Attempts Exhausted)
+Response:
+{
+  "id": "d5aa6ae4-26b8-4a90-800d-e226b1344fd9",
+  "topic": "fail",
+  "status": "failed",
+  "result": null,
+  "error": "The report oven is broken!",
+  "created_at": "2026-09-20T11:36:54.818Z",
+  "updated_at": "2026-09-20T11:38:41.579Z"
+}
+
+```
+
+*(Total duration spans 107 seconds across attempt 1, backoff delays, and attempt 3 before transitioning to failed).*
+
+#### 4. Scheduled Cron Heartbeat Log Output
+
+```text
+api-1 | [Heartbeat Cron] Reports status -> Pending: 0 | Done: 1 | Failed: 1 (Total: 2)
+api-1 | [Heartbeat Cron] Reports status -> Pending: 0 | Done: 1 | Failed: 1 (Total: 2)
+
+```
+
+### Dashboard & Operational Evidence
+
+#### Multi-App Registry & Functions Directory
+
+The local Inngest Dev Server (`:8288`) discovers background workers from both the Express API and Next.js frontend:
+
+*All backend worker functions (`say-hello`, `make-report`, and `heartbeat` with its `* * * * *` cron trigger) registered under `report-api` alongside the Next.js workflow engine.*
+
+#### Execution Timeline & Retry Backoff
+
+Inspection of the failed run demonstrates automated recovery handling:
+
+*Timeline showing 3 discrete execution attempts with increasing backoff delays, the `"The report oven is broken!"` stack trace, and the frontend monitoring status.*
 
 ---
 
@@ -360,11 +482,8 @@ docker compose restart api
 
 # 3. Retrieve tasks and ensure the created record remains present
 curl http://localhost:3000/tasks
+
 ```
-
-**Expected Result**: Task appears in the list after restart, proving SQLite persistence via Docker volume.
-
-![SQLite persistence screenshot](/sql-screenshot.png)
 
 *SQLite task data stored by the API and persisted across restarts.*
 
@@ -400,17 +519,14 @@ curl -i http://localhost:3000/public/info
 # Logout: 204 No Content
 curl -i -X POST http://localhost:3000/auth/logout \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+
 ```
 
 ### 3. Swagger UI & Interactive Testing
 
-Open `http://localhost:3000/docs` in your browser. Use the **Authorize** button to test protected endpoints with a valid bearer token. The lock icon marks `/protected/profile`, `/protected/dashboard`, and `/auth/logout` as protected operations.
-
-![Swagger UI documentation](/swagger-screenshot.png)
+Open `http://localhost:3000/docs` in your browser. Use the **Authorize** button to test protected endpoints with a valid bearer token.
 
 *Swagger UI for the task API with interactive endpoint testing.*
-
-![Swagger UI bearer authentication](/swagger-auth-screenshot.png)
 
 *Swagger UI with bearer token authentication enabled for protected endpoints.*
 
@@ -418,7 +534,7 @@ Open `http://localhost:3000/docs` in your browser. Use the **Authorize** button 
 
 ```powershell
 # 1. Trigger scraper and populate SQLite
-Invoke-RestMethod -Uri "http://localhost:3000/scraper" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"url":"http://books.toscrape.com"}'
+Invoke-RestMethod -Uri "http://localhost:3000/scraper" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"url":"[http://books.toscrape.com](http://books.toscrape.com)"}'
 
 # 2. Generate first report
 $res1 = Invoke-RestMethod -Uri "http://localhost:3000/reports" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"type":"books"}'
@@ -435,6 +551,7 @@ Write-Host "Force bypassed cache:" ($res3.id -ne $res1.id)
 # 5. Download and view generated PDF artifact
 Invoke-WebRequest -Uri "http://localhost:3000/reports/$($res1.id)/file" -OutFile "books-report.pdf"
 Start-Process "books-report.pdf"
+
 ```
 
 ### 5. AI Support Triage Endpoint
@@ -443,17 +560,7 @@ Start-Process "books-report.pdf"
 curl -i -X POST http://localhost:3000/triage \
   -H "Content-Type: application/json" \
   -d '{"text":"My invoice was charged twice this month and I need a refund."}'
-```
 
-**Expected Response** (200 OK):
-
-```json
-{
-  "category": "billing",
-  "urgency": "high",
-  "confidence": 0.96,
-  "reason": "Customer is reporting a duplicate charge and requesting a refund."
-}
 ```
 
 ---
@@ -477,9 +584,6 @@ docker compose logs -f inngest
 # Stop the stack (containers stopped, data persists)
 docker compose down
 
-# Stop and delete everything (data persists in volume)
-docker compose down
-
 # Stop and delete volumes (WARNING: deletes data)
 docker compose down -v
 
@@ -489,23 +593,9 @@ docker restart flyrank-task-api-api-1
 # View running containers
 docker ps
 
-# View all containers (including stopped)
-docker ps -a
-
-# View Docker volumes
-docker volume ls
-
 # Inspect a volume
 docker volume inspect flyrank-task-api_sqlite_data
 
-# Delete unused volumes
-docker volume prune
-
-# View container stats (CPU, memory, I/O)
-docker stats
-
-# Execute a command inside a running container
-docker exec -it flyrank-task-api-api-1 sh
 ```
 
 ---
@@ -518,27 +608,34 @@ flyrank-task-api/
 │   ├── src/
 │   │   ├── config/              # SQLite connection and table definitions
 │   │   ├── controllers/         # Route controllers (scraper, tasks, auth)
+│   │   ├── inngest/             # Inngest client and background functions
 │   │   ├── middlewares/         # JWT verification, CORS, error handling
-│   │   ├── routes/              # Express route modules
-│   │   ├── services/            # Playwright PDF rendering, report DB queries, LLM triage
+│   │   ├── routes/              # Express route modules (reports, inngest, tasks)
+│   │   ├── services/            # Playwright PDF rendering, job report store, LLM triage
 │   │   └── validators/          # Zod schema definitions
 │   ├── reports/                 # Stored PDF artifacts
 │   ├── Dockerfile               # Node.js 22 Alpine + Chromium configuration
 │   └── package.json
 ├── frontend/
 │   ├── src/
-│   │   ├── app/                 # Next.js App Router (dashboard, scraper, triage)
+│   │   ├── app/                 # Next.js App Router (dashboard, scraper, triage, monitor)
 │   │   ├── components/          # React Flow nodes, sidebar execution logs, KPI cards
 │   │   ├── inngest/             # Workflow functions and event handlers
 │   │   └── lib/                 # State management and API clients
 │   ├── Dockerfile
-│   ├── .env                     # (git-ignored) Provider credentials and runtime flags
 │   └── package.json
 ├── prompts/                     # Versioned LLM prompt templates (triage-v1.md)
 ├── logs/                        # Quarantined payloads and execution traces
-├── .env.example                 # Template for environment variables
 ├── docker-compose.yml           # Unified multi-service orchestration
-└── README.md                    # This file
+├── dashboard.png                # React Flow Inngest runs evidence
+├── flow.png                     # React Flow canvas evidence
+├── sql-screenshot.png           # SQLite volume persistence evidence
+├── swagger-screenshot.png       # Swagger documentation evidence
+├── swagger-auth-screenshot.png  # Swagger bearer token auth evidence
+├── functions.png                # Assignment A7 Inngest functions directory evidence
+├── details.png                  # Assignment A7 retry timeline and error evidence
+└── README.md
+
 ```
 
 ---
@@ -549,32 +646,34 @@ flyrank-task-api/
 
 If port `3000`, `3002`, or `8288` is already in use:
 
-**Windows PowerShell:**
 ```powershell
 Get-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess | Stop-Process
+
 ```
 
-**Alternative:** Rebind the host ports in `docker-compose.yml`:
+Alternatively, rebind the host ports in `docker-compose.yml`:
+
 ```yaml
 services:
   api:
     ports:
-      - "3001:3000"  # Changed from 3000:3000
+      - "3001:3000"
+
 ```
+
+### Inngest Cloud Mode Warning
+
+If logs indicate `In cloud mode but no signing key found`:
+Ensure `INNGEST_DEV=1` and `INNGEST_BASE_URL=http://inngest:8288` are specified in the `api` service environment inside `docker-compose.yml`.
 
 ### SQLite Permission or Directory Missing
 
-If the container logs indicate `SQLITE_CANTOPEN`, verify that the volume mapping points to a dedicated directory, not the application root:
+If container logs indicate `SQLITE_CANTOPEN`, verify that the volume mapping points to a dedicated directory:
 
 ```yaml
 volumes:
-  - sqlite_data:/app/data  # Correct: separate volume
-```
+  - sqlite_data:/app/data
 
-❌ **Do NOT use:**
-```yaml
-volumes:
-  - sqlite_data:/app  # Wrong: shadows entire app directory
 ```
 
 ### Native Dependency Compilation
@@ -583,66 +682,47 @@ The SQLite driver (`better-sqlite3`) builds native C++ binaries on installation.
 
 ```bash
 docker compose build --no-cache api
+
 ```
-
-### Container Exits Immediately
-
-Check the logs for errors:
-```bash
-docker compose logs api
-docker compose logs frontend
-```
-
-**Common causes:**
-- Missing `.env` file (should exist, can be empty)
-- Database directory doesn't exist (auto-created by app)
-- Syntax error in source code
-- Missing environment variables for Supabase or LLM provider
-
-### Data Disappeared After Restart
-
-Verify the volume is correctly mounted:
-```bash
-docker volume inspect flyrank-task-api_sqlite_data
-
-# Should show a "Mountpoint" on your host filesystem
-```
-
-If the volume exists but data is gone, check:
-1. `.env` has `DB_PATH=/app/data/tasks.db`
-2. `docker-compose.yml` has `sqlite_data:/app/data` (NOT `/app`)
-3. No `DROP TABLE` statement in application code
 
 ---
 
 ## Technology Stack
 
-* **Runtime:** Node.js v22 (Alpine Linux base for backend)
-* **Frontend Framework:** Next.js with App Router
+* **Runtime:** Node.js v22 (Alpine Linux base)
+* **Frontend Framework:** Next.js (App Router)
 * **Backend Framework:** Express.js
-* **Database Driver:** better-sqlite3 (synchronous SQLite bindings)
-* **Database:** SQLite (file-based, single-file, zero-config)
-* **LLM Integration:** Groq/OpenAI-compatible API with Zod validation
-* **Containerization:** Docker & Docker Compose
-* **Task Orchestration:** Inngest (local dev server)
-* **Visual Workflow:** React Flow
-* **PDF Generation:** Playwright + Chromium
+* **Database Driver:** better-sqlite3
+* **Database:** SQLite (file-based, volume-persisted)
+* **Task Orchestration:** Inngest v4 (multi-app Dev Server)
+* **Visual Workflow Engine:** React Flow
+* **PDF Engine:** Playwright + Chromium
+* **LLM Integration:** Groq / OpenAI-compatible endpoint with Zod schema repair
 * **Authentication:** Supabase Auth via `@supabase/supabase-js`
-* **Documentation:** Swagger UI (OpenAPI 3.0)
-* **Language:** TypeScript (frontend) / JavaScript (backend)
+* **API Documentation:** Swagger UI (OpenAPI 3.0)
+* **Containerization:** Docker & Docker Compose
 
 ---
 
 ## Stages & Assignments Completed
 
-✅ **Assignment A1** – In-memory array (baseline, data lost on restart)  
-✅ **Assignment A2** – SQLite file on disk (data persists locally)  
-✅ **Assignment A3** – Containerized with Docker Compose (portable, reproducible stack)  
-✅ **Assignment BE-03** – Supabase email/password authentication and protected routes  
-✅ **Assignment BE-04** – Multi-service orchestration with frontend and background engine  
-✅ **Assignment A17** – LLM Support Triage with Zod validation, repair loop, and quarantine pipeline (8/8 eval accuracy)  
-✅ **Assignment A18** – Polite Scraper and PDF Report Generation with same-day idempotency  
-✅ **Assignment A19** – Interactive AI Decision Flow with React Flow, Inngest, and LLM resilience  
+✅ **Assignment A1** – In-memory array CRUD API
+
+✅ **Assignment A2** – SQLite disk-based persistence
+
+✅ **Assignment A3** – Containerized stack with Docker volumes
+
+✅ **Assignment BE-03** – Supabase email/password authentication & protected routes
+
+✅ **Assignment BE-04** – Multi-service orchestration with Next.js frontend
+
+✅ **Assignment A17** – LLM Support Triage with schema repair & quarantine (8/8 eval)
+
+✅ **Assignment A18** – Polite Scraper & Playwright PDF reporting with same-day idempotency
+
+✅ **Assignment A19** – Interactive AI Decision Flow with React Flow & Inngest
+
+✅ **Assignment A7 / BE-06** – Distributed Background Job Engine with Inngest (202 Accepted, retry backoff, cron heartbeat, and durability)
 
 ---
 
@@ -652,15 +732,16 @@ If the volume exists but data is gone, check:
 
 ```bash
 curl http://localhost:3000/tasks
+
 ```
 
-**Response (200 OK):**
 ```json
 [
   { "id": 1, "title": "Set up Express server", "done": 1 },
   { "id": 2, "title": "Build read endpoints", "done": 0 },
   { "id": 3, "title": "Publish to GitHub", "done": 0 }
 ]
+
 ```
 
 ### POST /tasks – Create a new task
@@ -669,15 +750,16 @@ curl http://localhost:3000/tasks
 curl -X POST http://localhost:3000/tasks \
   -H "Content-Type: application/json" \
   -d '{"title":"Learn Docker"}'
+
 ```
 
-**Response (201 Created):**
 ```json
 {
   "id": 4,
   "title": "Learn Docker",
   "done": false
 }
+
 ```
 
 ### PUT /tasks/:id – Update a task
@@ -686,33 +768,36 @@ curl -X POST http://localhost:3000/tasks \
 curl -X PUT http://localhost:3000/tasks/1 \
   -H "Content-Type: application/json" \
   -d '{"title":"Update Express server","done":true}'
+
 ```
 
-**Response (200 OK):**
 ```json
 {
   "id": 1,
   "title": "Update Express server",
   "done": true
 }
+
 ```
 
 ### DELETE /tasks/:id – Delete a task
 
 ```bash
 curl -X DELETE http://localhost:3000/tasks/2
+
 ```
 
-**Response (204 No Content)** – No body returned.
+Returns `204 No Content`.
 
 ---
 
 ## Contributing
 
 Contributions are welcome! Feel free to:
-- Open an issue to report bugs or suggest features
-- Submit a pull request with improvements
-- Add optional stretch features (Redis cache, database indexes, migrations, etc.)
+
+* Open an issue to report bugs or suggest enhancements
+* Submit pull requests with improvements
+* Add stretch features (Redis caching, distributed tracing, database migrations)
 
 ---
 
@@ -728,4 +813,6 @@ This project is open-source and available under the **MIT License**.
 
 FlyRank AI Internship · Backend & Fullstack Track
 
-Originally built as Assignment A1–A3 (Task API), evolved through BE-03 (Auth), and now unified with A17 (Triage), A18 (Scraper), A19 (Decision Flow), and full Docker containerization.
+```
+
+```
