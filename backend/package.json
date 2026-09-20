@@ -1,26 +1,29 @@
 {
-  "name": "flyrank-backend",
-  "version": "1.0.0",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "FlyRank Backend API",
-  "dependencies": {
-    "@supabase/supabase-js": "^2.116.0",
-    "better-sqlite3": "^11.10.0",
-    "cheerio": "^1.2.0",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "inngest": "^4.20.0",
-    "openai": "^7.18.0",
-    "playwright-core": "^1.48.0",
-    "swagger-ui-express": "^5.0.1",
-    "uuid": "^11.0.0",
-    "zod": "^4.6.5"
-  }
+    "name":  "flyrank-backend",
+    "version":  "1.0.0",
+    "main":  "server.js",
+    "scripts":  {
+                    "start":  "node server.js",
+                    "test":  "echo \"Error: no test specified\" \u0026\u0026 exit 1"
+                },
+    "keywords":  [
+
+                 ],
+    "author":  "",
+    "license":  "ISC",
+    "description":  "FlyRank Backend API",
+    "dependencies":  {
+                         "@supabase/supabase-js":  "^2.116.0",
+                         "better-sqlite3":  "^11.10.0",
+                         "cheerio":  "^1.2.0",
+                         "dotenv":  "^17.4.2",
+                         "express":  "^5.2.1",
+                         "inngest":  "^4.20.0",
+                         "openai":  "^7.18.0",
+                         "playwright-core":  "^1.48.0",
+                         "swagger-ui-express":  "^5.0.1",
+                         "uuid":  "^11.0.0",
+                         "zod":  "^4.6.5",
+                         "cors":  "^2.8.5"
+                     }
 }

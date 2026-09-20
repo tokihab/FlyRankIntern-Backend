@@ -4,5 +4,6 @@ const { getScraperData, triggerScraper } = require('../controllers/scraper.contr
 
 router.get('/data', getScraperData);
 router.post('/trigger', triggerScraper);
+router.post('/', triggerScraper);
 
 module.exports = router;

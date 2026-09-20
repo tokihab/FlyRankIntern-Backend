@@ -38,10 +38,18 @@ const scrapedEntitySchema = z.discriminatedUnion('entity', [
   articleSchema
 ]);
 
+// Report generation payload validator (required by reports.routes.js)
+const reportGenerationSchema = z.object({
+  type: z.enum(['books', 'quotes']).default('quotes'),
+  filters: z.record(z.any()).optional().default({}),
+  force: z.boolean().optional().default(false)
+});
+
 module.exports = {
   urlSchema,
   bookSchema,
   quoteSchema,
   articleSchema,
-  scrapedEntitySchema
+  scrapedEntitySchema,
+  reportGenerationSchema // <-- Exported here
 };
