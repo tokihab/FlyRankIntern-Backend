@@ -341,7 +341,7 @@ Configure provider credentials and runtime flags in `frontend/.env` (keep untrac
 
 The completed background runs and dynamic model results are shown in the Inngest dashboard:
 
-![Completed Inngest runs](inngest-runs.png)
+![Completed Inngest runs](/inngest-runs.png)
 
 *Inngest dashboard showing executed decision workflows, run history, and background job metrics.*
 
@@ -349,7 +349,7 @@ The completed background runs and dynamic model results are shown in the Inngest
 
 The canvas screenshot shows successful node execution states, branching edges, and the sidebar execution logs:
 
-![Workflow UI](workflow-ui.png)
+![Workflow UI](/workflow-ui.png)
 
 *Interactive React Flow canvas with real-time execution status, decision logs, and branching logic visualization.*
 
@@ -484,7 +484,7 @@ api-1 | [Heartbeat Cron] Reports status -> Pending: 0 | Done: 1 | Failed: 1 (Tot
 
 The local Inngest Dev Server (`:8288`) discovers background workers from both the Express API and Next.js frontend:
 
-![Inngest Functions Directory](functions.png)
+![Inngest Functions Directory](/functions.png)
 
 *All backend worker functions (`say-hello`, `make-report`, and `heartbeat` with its `* * * * *` cron trigger) registered under `report-api` alongside the Next.js workflow engine.*
 
@@ -492,7 +492,7 @@ The local Inngest Dev Server (`:8288`) discovers background workers from both th
 
 Inspection of the failed run demonstrates automated recovery handling:
 
-![Inngest Run Details & Retries](details.png)
+![Inngest Run Details & Retries](/details.png)
 
 *Timeline showing 3 discrete execution attempts with increasing backoff delays, the `"The report oven is broken!"` stack trace, and the frontend monitoring status.*
 
@@ -519,7 +519,7 @@ curl http://localhost:3000/tasks
 
 **Expected Result**: Task appears in the list after restart, proving SQLite persistence via Docker volume.
 
-![SQLite persistence screenshot](sql-screenshot.png)
+![SQLite persistence screenshot](/sql-screenshot.png)
 
 *SQLite task data stored by the API and persisted across restarts.*
 
@@ -561,11 +561,11 @@ curl -i -X POST http://localhost:3000/auth/logout \
 
 Open `http://localhost:3000/docs` in your browser. Use the **Authorize** button to test protected endpoints with a valid bearer token. The lock icon marks `/protected/profile`, `/protected/dashboard`, and `/auth/logout` as protected operations.
 
-![Swagger UI documentation](swagger-screenshot.png)
+![Swagger UI documentation](/swagger-screenshot.png)
 
 *Swagger UI for the task API with interactive endpoint testing.*
 
-![Swagger UI bearer authentication](swagger-auth-screenshot.png)
+![Swagger UI bearer authentication](/swagger-auth-screenshot.png)
 
 *Swagger UI with bearer token authentication enabled for protected endpoints.*
 
