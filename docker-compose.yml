@@ -43,10 +43,11 @@ services:
 
   inngest:
     image: inngest/inngest:latest
-    command: inngest dev -u http://frontend:3002/api/inngest
+    command: inngest dev -u http://api:3000/api/inngest -u http://frontend:3002/api/inngest
     ports:
       - "8288:8288"
     depends_on:
+      - api
       - frontend
 
 volumes:

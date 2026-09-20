@@ -9,6 +9,7 @@ const scraperRoutes = require('./src/routes/scraper.routes');
 const healthRoutes = require('./src/routes/health.routes');
 const reportsRoutes = require('./src/routes/reports.routes');
 const internalRoutes = require('./src/routes/internal.routes');
+const inngestRoutes = require('./src/routes/inngest.routes');
 const errorHandler = require('./src/middlewares/error.middleware');
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/health', healthRoutes);
 app.use('/reports', reportsRoutes);
 app.use('/internal', internalRoutes);
 app.use('/api/triage', triageRoutes);
+app.use('/api/inngest', inngestRoutes);
 
 // 5. Error handler
 app.use(errorHandler);
