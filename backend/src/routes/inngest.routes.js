@@ -4,7 +4,6 @@ const { inngest } = require('../inngest/client');
 const { 
   sayHello, 
   makeReport, 
-  makeReportFailureHandler, 
   heartbeat 
 } = require('../inngest/functions');
 
@@ -13,7 +12,7 @@ const router = express.Router();
 router.use(
   serve({
     client: inngest,
-    functions: [sayHello, makeReport, makeReportFailureHandler, heartbeat]
+    functions: [sayHello, makeReport, heartbeat]
   })
 );
 

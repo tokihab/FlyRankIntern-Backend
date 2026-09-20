@@ -5,22 +5,36 @@ const {
   getJobReportCounts 
 } = require('../services/job-report.service');
 
+// 1. say-hello: simple 5s sleep function
 const sayHello = inngest.createFunction(
-  { id: 'say-hello' },
-  { event: 'test/hello' },
+  { 
+    id: 'say-hello',
+    triggers: [{ event: 'test/hello' }]
+  },
   async ({ step }) => {
     await step.sleep('wait-a-bit', '5s');
     return 'Hello from the background!';
   }
 );
 
+// 2. make-report: 3-step durable function with retries, concurrency, idempotency, and native onFailure
 const makeReport = inngest.createFunction(
   {
     id: 'make-report',
     retries: 2,
-    concurrency: [{ limit: 2 }]
+    concurrency: [{ limit: 2 }],
+    triggers: [{ event: 'report/requested' }],
+    onFailure: async ({ event, error }) => {
+      const originalEvent = event.data?.event;
+      const reportId = originalEvent?.data?.id;
+      if (reportId) {
+        updateJobReport(reportId, {
+          status: 'failed',
+          error: error?.message || event.data?.error?.message || 'The report oven is broken!'
+        });
+      }
+    }
   },
-  { event: 'report/requested' },
   async ({ event, step }) => {
     const { id, topic } = event.data;
 
@@ -68,25 +82,12 @@ const makeReport = inngest.createFunction(
   }
 );
 
-// On-failure handler to mark job as failed in-memory after retry exhaustion
-const makeReportFailureHandler = inngest.createFunction(
-  { id: 'make-report-failure' },
-  { event: 'inngest/function.failed', if: 'event.data.function_id == "make-report"' },
-  async ({ event }) => {
-    const originalEvent = event.data.event;
-    const reportId = originalEvent?.data?.id;
-    if (reportId) {
-      updateJobReport(reportId, {
-        status: 'failed',
-        error: event.data.error?.message || 'Report generation failed'
-      });
-    }
-  }
-);
-
+// 3. Cron heartbeat running every minute
 const heartbeat = inngest.createFunction(
-  { id: 'heartbeat' },
-  { cron: '* * * * *' },
+  { 
+    id: 'heartbeat',
+    triggers: [{ cron: '* * * * *' }]
+  },
   async () => {
     const counts = getJobReportCounts();
     const logLine = `[Heartbeat Cron] Reports status -> Pending: ${counts.pending} | Done: ${counts.done} | Failed: ${counts.failed} (Total: ${counts.total})`;
@@ -98,6 +99,5 @@ const heartbeat = inngest.createFunction(
 module.exports = {
   sayHello,
   makeReport,
-  makeReportFailureHandler,
   heartbeat
 };
