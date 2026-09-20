@@ -329,7 +329,7 @@ Configure provider credentials and runtime flags in `frontend/.env` (keep untrac
 
 The completed background runs and dynamic model results are shown in the Inngest dashboard:
 
-![Completed Inngest runs](/inngest-runs.png)
+![Completed Inngest runs](/dashboard.png)
 
 *Inngest dashboard showing executed decision workflows, run history, and background job metrics.*
 
@@ -337,7 +337,7 @@ The completed background runs and dynamic model results are shown in the Inngest
 
 The canvas screenshot shows successful node execution states, branching edges, and the sidebar execution logs:
 
-![Workflow UI](/workflow-ui.png)
+![Workflow UI](/flow.png)
 
 *Interactive React Flow canvas with real-time execution status, decision logs, and branching logic visualization.*
 
