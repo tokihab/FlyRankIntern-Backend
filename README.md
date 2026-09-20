@@ -1,9 +1,9 @@
 ```markdown
 # FlyRank Unified Platform: Core Task API & AI Decision Flow
 
-A full-stack application integrating an Express.js backend, SQLite persistence, Supabase authentication, LLM-driven triage, a polite web scraper with automated Playwright PDF reporting, and an interactive Next.js React Flow decision canvas orchestrated by Inngest.
+A full-stack platform integrating an Express.js REST API with SQLite persistence, Supabase authentication, LLM-driven triage, a polite web scraper with automated Playwright PDF reporting, and an interactive Next.js React Flow decision canvas orchestrated by Inngest.
 
-```
+---
 
 ## Architecture Overview
 
@@ -74,31 +74,43 @@ Host Machine
 
 ### 1. Persistent Task API & Authentication
 
-* **Single-Command Multi-Container Stack**: Docker Compose builds and boots all services and networks simultaneously.
-* **Persistent SQLite Storage**: Data survives restarts, rebuilds, and container removals via named Docker volumes.
-* **Supabase Authentication**: Token-based authentication using bearer tokens, password encryption, and delegation to Supabase Auth.
-* **Parameterized Queries**: All database operations use prepared statements via `better-sqlite3` to prevent SQL injection.
-* **Interactive API Documentation**: Swagger UI documentation served natively at `/docs`.
+* **Single-Command Stack**: Docker Compose orchestrates the API, Next.js web application, and Inngest background engine.
+* **Persistent SQLite Storage**: SQLite database files persist across container restarts, stops, and rebuilds via named Docker volumes.
+* **Supabase Authentication**: Secure token verification using bearer tokens delegated to Supabase Auth.
+* **Parameterized SQL Queries**: All queries execute through prepared statements in `better-sqlite3` to prevent injection vulnerabilities.
+* **Interactive API Documentation**: Built-in Swagger UI explorer available directly at `/docs`.
 
 ### 2. AI Support Triage (Assignment A17)
 
-* **Prompt Engineering**: Versioned system prompts (`prompts/triage-v1.md`) mapping inbound tickets to categories (`bug`, `billing`, `feature`, `other`).
-* **Validation & Self-Repair**: Strict Zod schema enforcement with an automatic repair prompt loop on schema mismatches.
-* **Quarantine Pipeline**: Unrecoverable responses are quarantined under `logs/quarantine.jsonl` with full request and payload metadata.
+* **Prompt Engineering**: Versioned system prompt (`prompts/triage-v1.md`) categorizing tickets into `billing`, `bug`, `feature`, and `other`.
+* **Validation & Self-Repair**: Strict Zod schema enforcement with an automated repair prompt loop on malformed outputs.
+* **Quarantine Pipeline**: Unrecoverable responses are quarantined under `logs/quarantine.jsonl` with request and error context.
 * **Operational Guardrails**: Configurable kill switch (`LLM_KILL_SWITCH=1`), deterministic stubs, and strict request timeouts.
 
 ### 3. Polite Scraper & PDF Reporting
 
-* **Headless Scraping Pipeline**: Scrapes structured datasets (Books, Quotes) with rate limiting, caching, and SQLite data synchronization.
+* **Headless Scraping Pipeline**: Crawls structured datasets (Books, Quotes) with caching, rate limiting, and SQLite data synchronization.
 * **Automated PDF Engine**: Uses Playwright to render multi-page operational reports featuring dynamic KPI cards, price distributions, and repeating table headers.
-* **Same-Day Idempotency**: Identical report requests return existing cached PDF artifacts unless explicitly overridden with `force: true`.
+* **Same-Day Idempotency**: Repeated report requests return existing cached PDF artifacts unless explicitly bypassed with `force: true`.
 
 ### 4. Interactive AI Decision Flow
 
-* **Visual Workflow Canvas**: React Flow surface allowing users to create, connect, and configure decision nodes.
-* **Background Execution**: Nodes dispatch `workflow/execute-node` events to Inngest for asynchronous background evaluation.
-* **Live Execution Polling**: The frontend monitors execution status, rendering state transitions (*Idle*, *Running*, *Success*, *Error*) and color-coded branching edges (`YES` / `NO`).
+* **Visual Workflow Canvas**: React Flow canvas allowing users to create, connect, and configure decision nodes.
+* **Background Execution**: Dispatches `workflow/execute-node` events to Inngest for asynchronous background evaluation.
+* **Live Execution Polling**: The frontend monitors execution status, rendering state transitions (*Idle*, *Running*, *Success*, *Error*) and branching edges (`YES` / `NO`).
 * **Workflow Portability**: Full canvas import and export via JSON alongside browser local storage persistence.
+
+---
+
+## AI Decision Flow Evidence
+
+### Inngest Dashboard
+
+The completed background runs and dynamic model results are shown in the Inngest dashboard:
+
+### React Flow Canvas
+
+The canvas screenshot shows successful node execution states, branching edges, and the sidebar execution logs:
 
 ---
 
@@ -135,14 +147,14 @@ docker compose up -d --build
 
 ```
 
-### 2. Verify Container Health
+### 2. Verify Running Containers
 
 ```bash
 docker compose ps
 
 ```
 
-Confirm that `flyrank-task-api-api-1`, `flyrank-task-api-frontend-1`, and `flyrank-task-api-inngest-1` show status `Up`.
+All three services (`flyrank-task-api-api-1`, `flyrank-task-api-frontend-1`, and `flyrank-task-api-inngest-1`) should report status `Up`.
 
 ### 3. Check System Status
 
@@ -195,7 +207,7 @@ Expected output:
 
 | Method | Endpoint | Description | Request Body |
 | --- | --- | --- | --- |
-| `POST` | `/triage` | Classify inbound ticket | `{"text": "My subscription billed twice this cycle."}` |
+| `POST` | `/triage` | Classify inbound ticket | `{"text": "My invoice was charged twice this month and I need a refund."}` |
 
 Example Response:
 
@@ -204,7 +216,7 @@ Example Response:
   "category": "billing",
   "urgency": "high",
   "confidence": 0.96,
-  "reason": "User is reporting a duplicate subscription payment."
+  "reason": "This is a billing dispute about a duplicate charge."
 }
 
 ```
@@ -230,7 +242,7 @@ Example Response:
 # 1. Create a task
 curl -X POST http://localhost:3000/tasks \
   -H "Content-Type: application/json" \
-  -d '{"title":"Volume persistence test"}'
+  -d '{"title":"Docker volume persistence test"}'
 
 # 2. Restart the API container
 docker compose restart api
@@ -240,28 +252,40 @@ curl http://localhost:3000/tasks
 
 ```
 
-### 2. End-to-End Authentication Flow
+*SQLite task data stored by the API.*
+
+---
+
+### 2. Swagger UI & End-to-End Authentication
+
+Interactive Swagger UI documentation is available at `http://localhost:3000/docs`.
+
+*Swagger UI for the task API.*
 
 ```bash
 # 1. Create a user
 curl -i -X POST http://localhost:3000/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{"email":"engineer@example.com","password":"StrongPassword123!"}'
+  -d '{"email":"user@example.com","password":"a-strong-password"}'
 
 # 2. Log in and extract the access token
 curl -i -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"engineer@example.com","password":"StrongPassword123!"}'
+  -d '{"email":"user@example.com","password":"a-strong-password"}'
 
 # 3. Access protected route with Bearer token
 curl -i http://localhost:3000/protected/profile \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 
 # 4. Attempt access with invalid token (expect 401)
 curl -i http://localhost:3000/protected/profile \
   -H "Authorization: Bearer invalid-token"
 
 ```
+
+Use the **Authorize** button in Swagger UI to test protected endpoints:
+
+---
 
 ### 3. Scraper, Idempotency, and PDF Generation (PowerShell)
 
@@ -273,7 +297,7 @@ Invoke-RestMethod -Uri "http://localhost:3000/scraper" -Method POST -Headers @{"
 $res1 = Invoke-RestMethod -Uri "http://localhost:3000/reports" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"type":"books"}'
 $res1 | ConvertTo-Json
 
-# 3. Stage 5 Checkpoint: Test idempotency (same day, same parameters returns cached record)
+# 3. Stage 5 Checkpoint: Test idempotency (same day returns cached record)
 $res2 = Invoke-RestMethod -Uri "http://localhost:3000/reports" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"type":"books"}'
 Write-Host "Idempotency match:" ($res1.id -eq $res2.id)
 
@@ -295,26 +319,26 @@ Start-Process "books-report.pdf"
 flyrank-task-api/
 ├── backend/
 │   ├── src/
-│   │   ├── config/              # Database connection and SQLite schema
-│   │   ├── controllers/         # Scraper, task, and auth route controllers
-│   │   ├── middlewares/         # Supabase JWT verification and error handlers
-│   │   ├── routes/              # Express endpoint routing definitions
+│   │   ├── config/              # SQLite connection and table definitions
+│   │   ├── controllers/         # Route controllers (scraper, tasks, auth)
+│   │   ├── middlewares/         # JWT verification, CORS, error handling
+│   │   ├── routes/              # Express route modules
 │   │   ├── services/            # Playwright PDF rendering, report DB queries, LLM triage
 │   │   └── validators/          # Zod schema definitions
-│   ├── reports/                 # Stored generated PDF artifacts
+│   ├── reports/                 # Stored PDF artifacts
 │   ├── Dockerfile               # Node.js 22 Alpine + Chromium configuration
 │   └── package.json
 ├── frontend/
 │   ├── src/
 │   │   ├── app/                 # Next.js App Router (dashboard, scraper, triage)
-│   │   ├── components/          # React Flow nodes, sidebar logs, metric cards
-│   │   ├── inngest/             # Inngest functions and workflow event handlers
-│   │   └── lib/                 # State management, execution store, and API clients
+│   │   ├── components/          # React Flow nodes, sidebar execution logs, KPI cards
+│   │   ├── inngest/             # Workflow functions and event handlers
+│   │   └── lib/                 # State management and API clients
 │   ├── Dockerfile
 │   └── package.json
 ├── prompts/                     # Versioned LLM prompt templates (triage-v1.md)
-├── logs/                        # Quarantined LLM outputs and traces
-├── docker-compose.yml           # Multi-service stack definition
+├── logs/                        # Quarantined payloads and execution traces
+├── docker-compose.yml           # Unified multi-service orchestration
 └── README.md
 
 ```
@@ -328,16 +352,15 @@ flyrank-task-api/
 If port `3000`, `3002`, or `8288` is already in use:
 
 ```powershell
-# Locate and terminate the process holding the port on Windows
 Get-Process -Id (Get-NetTCPConnection -LocalPort 3000).OwningProcess | Stop-Process
 
 ```
 
-Or remap the host port inside `docker-compose.yml` (e.g., `"3001:3000"`).
+Alternatively, rebind the host ports in `docker-compose.yml` (e.g., `"3001:3000"`).
 
 ### SQLite Permission or Directory Missing
 
-If you see `SQLITE_CANTOPEN`, verify that the volume mount points to `/app/data` and does not shadow the application code:
+If the container logs indicate `SQLITE_CANTOPEN`, verify that the volume mapping points to a dedicated directory:
 
 ```yaml
 volumes:
@@ -347,7 +370,7 @@ volumes:
 
 ### Native Dependency Compilation
 
-The SQLite driver (`better-sqlite3`) builds native C++ binaries on installation. If switching Node versions or container bases, force a clean rebuild:
+The SQLite driver (`better-sqlite3`) builds native C++ binaries on installation. If switching Node versions or container bases, rebuild using:
 
 ```bash
 docker compose build --no-cache api
