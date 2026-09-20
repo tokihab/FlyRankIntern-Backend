@@ -310,7 +310,7 @@ React Flow polling <-- /api/workflow/status/:runId
 - **Workflow Persistence**: Full canvas import/export via JSON and browser local storage.
 - **Inngest Dashboard**: View completed runs, retry history, and dynamic model results at `http://localhost:8288`.
 
-### Setup
+### Setup & Evidence
 
 From the repository root:
 
@@ -324,6 +324,22 @@ npx inngest-cli dev -u http://localhost:3002/api/inngest  # Runs Inngest on port
 ```
 
 Configure provider credentials and runtime flags in `frontend/.env` (keep untracked).
+
+#### Inngest Dashboard
+
+The completed background runs and dynamic model results are shown in the Inngest dashboard:
+
+![Completed Inngest runs](./public/inngest-runs.png)
+
+*Inngest dashboard showing executed decision workflows, run history, and background job metrics.*
+
+#### React Flow Canvas
+
+The canvas screenshot shows successful node execution states, branching edges, and the sidebar execution logs:
+
+![Workflow UI](./public/workflow-ui.png)
+
+*Interactive React Flow canvas with real-time execution status, decision logs, and branching logic visualization.*
 
 ---
 
@@ -347,6 +363,10 @@ curl http://localhost:3000/tasks
 ```
 
 **Expected Result**: Task appears in the list after restart, proving SQLite persistence via Docker volume.
+
+![SQLite persistence screenshot](./public/sql-screenshot.png)
+
+*SQLite task data stored by the API and persisted across restarts.*
 
 ### 2. End-to-End Authentication Flow
 
@@ -386,9 +406,13 @@ curl -i -X POST http://localhost:3000/auth/logout \
 
 Open `http://localhost:3000/docs` in your browser. Use the **Authorize** button to test protected endpoints with a valid bearer token. The lock icon marks `/protected/profile`, `/protected/dashboard`, and `/auth/logout` as protected operations.
 
-![Swagger UI bearer authentication](swagger-auth-screenshot.png)
+![Swagger UI documentation](./public/swagger-screenshot.png)
 
-*Swagger UI for the task API with bearer token authentication.*
+*Swagger UI for the task API with interactive endpoint testing.*
+
+![Swagger UI bearer authentication](./public/swagger-auth-screenshot.png)
+
+*Swagger UI with bearer token authentication enabled for protected endpoints.*
 
 ### 4. Scraper, Idempotency, and PDF Generation
 
