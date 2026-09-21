@@ -4,7 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       PORT: 3000
       DB_PATH: /app/data/tasks.db
@@ -26,12 +26,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3002:3002"
+      - "3003:3002"
     environment:
       PORT: 3002
       BACKEND_URL: http://api:3000
       BACKEND_INTERNAL_URL: http://api:3000
-      NEXT_PUBLIC_API_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:3001
       INNGEST_BASE_URL: http://inngest:8288
       INNGEST_DEV: 1
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.groq.com/openai/v1}
@@ -47,7 +47,7 @@ services:
     image: inngest/inngest:latest
     command: inngest dev -u http://api:3000/api/inngest -u http://frontend:3002/api/inngest
     ports:
-      - "8288:8288"
+      - "8289:8288"
     depends_on:
       - api
       - frontend

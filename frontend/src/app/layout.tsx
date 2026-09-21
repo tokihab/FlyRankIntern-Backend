@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   description: "Build and test resilient AI decision workflows.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"

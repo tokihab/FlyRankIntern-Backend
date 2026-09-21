@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Bot, Database, GitBranch, Home, Menu, Network, ShieldCheck, X } from "lucide-react";
+import { Activity, Bot, Database, FormInput, GitBranch, Home, Menu, Network, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 
 const items = [
@@ -12,6 +12,7 @@ const items = [
   ["/triage", "AI Triage", Bot],
   ["/flow", "Decision Flow", GitBranch],
   ["/inngest-monitor", "Inngest Monitor", Network],
+  ["/lead-capture", "Lead Capture", FormInput],
 ] as const;
 
 export default function PlatformShell({ children }: { children: React.ReactNode }) {
